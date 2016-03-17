@@ -1,4 +1,4 @@
-/*     Copyright 2015 Egor Yusov
+/*     Copyright 2015-2016 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -89,9 +89,10 @@ DX::DeviceResources::DeviceResources() :
 // Configures the Direct3D device, and stores handles to it and the device context.
 void DX::DeviceResources::CreateDeviceResources() 
 {
-    EngineCreationAttribs EngineCreationAttribs;
-    EngineCreationAttribs.strShaderCachePath = "bin\\tmp\\ShaderCache";
-    CreateDeviceAndImmediateContextD3D11( EngineCreationAttribs, &m_pRenderDevice, &m_pDeviceContext);
+    EngineD3D11Attribs DeviceAttribs;
+    DeviceAttribs.DebugFlags = (Uint32)EngineD3D11DebugFlags::VerifyCommittedShaderResources |
+                               (Uint32)EngineD3D11DebugFlags::VerifyCommittedResourceRelevance;
+    CreateDeviceAndImmediateContextD3D11( DeviceAttribs, &m_pRenderDevice, &m_pDeviceContext);
 
     // Store pointers to the Direct3D 11.1 API device and immediate context.
     IRenderDeviceD3D11 *pRenderDeviceD3D11 = nullptr;

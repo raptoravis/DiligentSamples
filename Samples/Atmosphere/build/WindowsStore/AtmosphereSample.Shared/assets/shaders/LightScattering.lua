@@ -4,31 +4,46 @@
 --[[
 
 extResourceMapping
-
+MainBackBufferFmt
+MainDepthBufferFmt
+OffscreenBackBufferFmt
 ]]-- 
 
 
 ---------------------------------  Depth Stencil States ---------------------------------------
+CoordinateTexFmt = "TEX_FORMAT_RG32_FLOAT"
+SliceEndpointsFmt = "TEX_FORMAT_RGBA32_FLOAT"
+InterpolationSourceTexFmt = "TEX_FORMAT_RGBA32_UINT"
+EpipolarCamSpaceZFmt = "TEX_FORMAT_R32_FLOAT"
+EpipolarInsctrTexFmt = "TEX_FORMAT_RGBA16_FLOAT"
+EpipolarImageDepthFmt = "TEX_FORMAT_D24_UNORM_S8_UINT"
+EpipolarExtinctionFmt = "TEX_FORMAT_RGBA8_UNORM"
+AmbientSkyLightTexFmt = "TEX_FORMAT_RGBA16_FLOAT"
+LuminanceTexFmt = "TEX_FORMAT_R16_FLOAT"
+SliceUVDirAndOriginTexFmt = "TEX_FORMAT_RGBA32_FLOAT"
+CamSpaceZFmt = "TEX_FORMAT_R32_FLOAT"
 
-EnableDepthDSS = DepthStencilState.Create{    
-	Name = "LightScattering.lua: comparison less, writes enabled DSS",
+EnableDepthDesc = 
+{
 	DepthEnable = true,
     DepthWriteEnable = true,
 	DepthFunc = "COMPARISON_FUNC_LESS"
 }
 
-CmpEqNoWritesDSS = DepthStencilState.Create{    
-	Name = "LightScattering.lua: comparison equal, no writes DSS",
+DisableDepthDesc = 
+{
+	DepthEnable = false,
+    DepthWriteEnable = false
+}
+
+
+CmpEqNoWritesDSSDesc =
+{    
 	DepthEnable = true,
     DepthWriteEnable = false,
 	DepthFunc = "COMPARISON_FUNC_EQUAL"
 }
 
-DisableDepthDSS = DepthStencilState.Create{    
-	Name = "LightScattering.lua: disable depth DSS",
-	DepthEnable = false,
-    DepthWriteEnable = false
-}
 
 -- Disable depth testing and always increment stencil value
 -- This depth stencil state is used to mark samples which will undergo further processing
@@ -36,8 +51,8 @@ DisableDepthDSS = DepthStencilState.Create{
 -- stencil value untouched
 -- For instance, pixel shader performing epipolar coordinates generation discards all 
 -- sampes, whoose coordinates are outside the screen [-1,1]x[-1,1] area
-DSSDesc = {
-	Name = "LightScattering.lua: disable depth, inc stencil DSS",
+IncStencilAlwaysDSSDesc = 
+{
     DepthEnable = false,
     DepthWriteEnable = false,
     StencilEnable = true,
@@ -56,7 +71,6 @@ DSSDesc = {
 	StencilReadMask = 0xFF,
 	StencilWriteMask= 0xFF
 }
-IncStencilAlwaysDSS = DepthStencilState.Create(DSSDesc)
 
 -- Disable depth testing, stencil testing function equal, increment stencil
 -- This state is used to process only those pixels that were marked at the previous pass
@@ -64,35 +78,58 @@ IncStencilAlwaysDSS = DepthStencilState.Create(DSSDesc)
 -- as some pixels can also be discarded during the draw call
 -- For instance, pixel shader marking ray marching samples processes only those pixels which are inside
 -- the screen. It also discards all but those samples that are interpolated from themselves
-DSSDesc.FrontFace.StencilFunc = "COMPARISON_FUNC_EQUAL"
-DSSDesc.BackFace.StencilFunc = "COMPARISON_FUNC_EQUAL"
-DSSDesc.Name = "LightScattering.lua: disable depth, stencil equal, inc stencil DSS"
-StencilEqIncStencilDSS = DepthStencilState.Create(DSSDesc)
-
-
--- Disable depth testing, stencil testing function equal, keep stencil
-DSSDesc.FrontFace.StencilPassOp = "STENCIL_OP_KEEP"
-DSSDesc.BackFace.StencilPassOp = "STENCIL_OP_KEEP"
-DSSDesc.Name = "LightScattering.lua: disable depth, stencil equal, keep stencil DSS"
-StencilEqKeepStencilDSS = DepthStencilState.Create(DSSDesc)
-
-
-
----------------------------------  Rasterizer States ---------------------------------------
-
-SolidFillNoCullRS = RasterizerState.Create{
-	Name = "LightScattering.lua: solid fill, no cull RS",
-	FillMode = "FILL_MODE_SOLID",
-	CullMode = "CULL_MODE_NONE",
-	FrontCounterClockwise = true
+StencilEqIncStencilDSSDesc = 
+{
+    DepthEnable = false,
+    DepthWriteEnable = false,
+    StencilEnable = true,
+    FrontFace = {
+		StencilFunc = "COMPARISON_FUNC_EQUAL",
+		StencilPassOp = "STENCIL_OP_INCR_SAT", 
+		StencilFailOp = "STENCIL_OP_KEEP",  
+		StencilDepthFailOp = "STENCIL_OP_KEEP"
+	},
+    BackFace  = {
+		StencilFunc = "COMPARISON_FUNC_EQUAL",
+		StencilPassOp = "STENCIL_OP_INCR_SAT",
+		StencilFailOp = "STENCIL_OP_KEEP",  
+		StencilDepthFailOp = "STENCIL_OP_KEEP"
+	},
+	StencilReadMask = 0xFF,
+	StencilWriteMask= 0xFF
 }
 
 
-------------------------------------  Blend States ------------------------------------------
-DefaultBS = BlendState.Create{Name = "LightScattering.lua: default BS"}
+-- Disable depth testing, stencil testing function equal, keep stencil
+StencilEqKeepStencilDSSDesc = 
+{
+    DepthEnable = false,
+    DepthWriteEnable = false,
+    StencilEnable = true,
+    FrontFace = {
+		StencilFunc = "COMPARISON_FUNC_EQUAL",
+		StencilPassOp = "STENCIL_OP_KEEP", 
+		StencilFailOp = "STENCIL_OP_KEEP",  
+		StencilDepthFailOp = "STENCIL_OP_KEEP"
+	},
+    BackFace  = {
+		StencilFunc = "COMPARISON_FUNC_EQUAL",
+		StencilPassOp = "STENCIL_OP_KEEP",
+		StencilFailOp = "STENCIL_OP_KEEP",  
+		StencilDepthFailOp = "STENCIL_OP_KEEP"
+	},
+	StencilReadMask = 0xFF,
+	StencilWriteMask= 0xFF
+}
 
-BSDesc = {
-	Name = "LightScattering.lua: additive blend BS",
+
+
+
+------------------------------------  Blend States ------------------------------------------
+DefaultBlendDesc = {}
+
+AdditiveBlendBSDesc = 
+{
 	IndependentBlendEnable = false,
 	RenderTargets = {
 		{
@@ -106,14 +143,22 @@ BSDesc = {
 		}
 	}
 }
-AdditiveBlendBS = BlendState.Create(BSDesc)
 
-BSDesc.Name = "LightScattering.lua: Alpha blend BS"
-BSDesc.RenderTargets[1].SrcBlend      = "BLEND_FACTOR_SRC_ALPHA"
-BSDesc.RenderTargets[1].SrcBlendAlpha = "BLEND_FACTOR_SRC_ALPHA"
-BSDesc.RenderTargets[1].DestBlend      = "BLEND_FACTOR_INV_SRC_ALPHA"
-BSDesc.RenderTargets[1].DestBlendAlpha = "BLEND_FACTOR_INV_SRC_ALPHA"
-AlphaBlendBS = BlendState.Create(BSDesc)
+AlphaBlendBSDesc = 
+{
+	IndependentBlendEnable = false,
+	RenderTargets = {
+		{
+			BlendEnable = true,
+			BlendOp     ="BLEND_OPERATION_ADD",
+			BlendOpAlpha= "BLEND_OPERATION_ADD",
+			DestBlend   = "BLEND_FACTOR_INV_SRC_ALPHA",
+			DestBlendAlpha= "BLEND_FACTOR_INV_SRC_ALPHA",
+			SrcBlend     = "BLEND_FACTOR_SRC_ALPHA",
+			SrcBlendAlpha= "BLEND_FACTOR_SRC_ALPHA"
+		}
+	}
+}
 
 
 ------------------------------------  Samplers ------------------------------------------
@@ -140,12 +185,13 @@ PointClampSampler = Sampler.Create{
 
 function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 	local TexDesc = {
-		Type = "TEXTURE_TYPE_2D", 
+		Type = "RESOURCE_DIM_TEX_2D", 
 		Width = MaxSamplesInSlice, Height = NumSlices,
-		Format = "TEX_FORMAT_RG32_FLOAT",
+		Format = CoordinateTexFmt,
 		MipLevels = 1,
 		Usage = "USAGE_DEFAULT",
-		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"}
+		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"},
+		ClearValue = {Format = CoordinateTexFmt, Color = {r=-1e+30, g=-1e+30, b=-1e+30, a=-1e+30}}
 	}
 	-- MaxSamplesInSlice x NumSlices RG32F texture to store screen-space coordinates
 	-- for every epipolar sample
@@ -159,7 +205,8 @@ function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 	-- for every epipolar slice
 	TexDesc.Width = NumSlices
 	TexDesc.Height = 1
-	TexDesc.Format = "TEX_FORMAT_RGBA32_FLOAT"
+	TexDesc.Format = SliceEndpointsFmt
+	TexDesc.ClearValue = {Color = {r=-1e+30}}
 	tex2DSliceEndpoints = Texture.Create(TexDesc)
 	tex2DSliceEndpointsSRV = tex2DSliceEndpoints:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
 	tex2DSliceEndpointsRTV = tex2DSliceEndpoints:GetDefaultView("TEXTURE_VIEW_RENDER_TARGET")
@@ -175,7 +222,7 @@ function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 	-- interpolation source indices. However, NVidia GLES does
 	-- not supported imge load/store operations on this format, 
 	-- so we have to resort to RGBA32U.
-	TexDesc.Format = "TEX_FORMAT_RGBA32_UINT"
+	TexDesc.Format = InterpolationSourceTexFmt
 	TexDesc.BindFlags = {"BIND_UNORDERED_ACCESS", "BIND_SHADER_RESOURCE"}
 	tex2DInterpolationSource = Texture.Create(TexDesc)
 	tex2DInterpolationSourceSRV = tex2DInterpolationSource:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
@@ -186,7 +233,7 @@ function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 
 	-- MaxSamplesInSlice x NumSlices R32F texture to store camera-space Z coordinate,
 	-- for every epipolar sample
-	TexDesc.Format = "TEX_FORMAT_R32_FLOAT"
+	TexDesc.Format = EpipolarCamSpaceZFmt
 	TexDesc.BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"}
 	tex2DEpipolarCamSpaceZ = Texture.Create(TexDesc)
 	tex2DEpipolarCamSpaceZSRV = tex2DEpipolarCamSpaceZ:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
@@ -196,7 +243,9 @@ function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 
 	-- MaxSamplesInSlice x NumSlices RGBA16F texture to store interpolated inscattered light,
 	-- for every epipolar sample
-	TexDesc.Format = "TEX_FORMAT_RGBA16_FLOAT"
+	TexDesc.Format = EpipolarInsctrTexFmt
+	flt16max = 65504
+	TexDesc.ClearValue = {Format = TexDesc.Format, Color = {r=-flt16max, g=-flt16max, b=-flt16max, a=-flt16max}}
 	tex2DEpipolarInscattering = Texture.Create(TexDesc)
 	tex2DEpipolarInscatteringSRV = tex2DEpipolarInscattering:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
 	tex2DEpipolarInscatteringRTV = tex2DEpipolarInscattering:GetDefaultView("TEXTURE_VIEW_RENDER_TARGET")
@@ -205,6 +254,7 @@ function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 
 	-- MaxSamplesInSlice x NumSlices RGBA16F texture to store initial inscattered light,
 	-- for every epipolar sample
+	TexDesc.ClearValue = {Color = {r=0, g=0, b=0, a=0}}
 	tex2DInitialScatteredLight = Texture.Create(TexDesc)
 	tex2DInitialScatteredLightSRV = tex2DInitialScatteredLight:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
 	tex2DInitialScatteredLightRTV = tex2DInitialScatteredLight:GetDefaultView("TEXTURE_VIEW_RENDER_TARGET")
@@ -213,8 +263,9 @@ function CreateAuxTextures(NumSlices, MaxSamplesInSlice)
 
 	-- MaxSamplesInSlice x NumSlices depth stencil texture to mark samples for processing,
 	-- for every epipolar sample
-	TexDesc.Format = "TEX_FORMAT_D24_UNORM_S8_UINT"
+	TexDesc.Format = EpipolarImageDepthFmt
 	TexDesc.BindFlags = "BIND_DEPTH_STENCIL"
+	TexDesc.ClearValue = {Format = EpipolarImageDepthFmt, DepthStencil = {Depth=1, Stencil=0}}
 	tex2DEpipolarImageDepth = Texture.Create(TexDesc)
 	tex2DEpipolarImageDSV = tex2DEpipolarImageDepth:GetDefaultView("TEXTURE_VIEW_DEPTH_STENCIL")
 
@@ -234,12 +285,13 @@ end
 
 function CreateExtinctionTexture(NumSlices, MaxSamplesInSlice)
 	local TexDesc = {
-		Type = "TEXTURE_TYPE_2D", 
+		Type = "RESOURCE_DIM_TEX_2D", 
 		Width = MaxSamplesInSlice, Height = NumSlices,
-		Format = "TEX_FORMAT_RGBA8_UNORM",
+		Format = EpipolarExtinctionFmt,
 		MipLevels = 1,
 		Usage = "USAGE_DEFAULT",
-		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"}
+		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"},
+		ClearValue = {Color = {r=1, g=1, b=1, a=1}}
 	}
 	-- MaxSamplesInSlice x NumSlices RGBA8_UNORM texture to store extinction
 	-- for every epipolar sample
@@ -256,9 +308,9 @@ end
 function CreateLowResLuminanceTexture(LowResLuminanceMips)
 	-- Create low-resolution texture to store image luminance
 	local TexDesc = {
-		Type = "TEXTURE_TYPE_2D", 
+		Type = "RESOURCE_DIM_TEX_2D", 
 		Width = 2^(LowResLuminanceMips-1), Height = 2^(LowResLuminanceMips-1),
-		Format = "TEX_FORMAT_R16_FLOAT",
+		Format = LuminanceTexFmt,
 		MipLevels = LowResLuminanceMips,
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"},
@@ -275,6 +327,7 @@ function CreateLowResLuminanceTexture(LowResLuminanceMips)
 	TexDesc.Height = 1
 	TexDesc.MipLevels = 1
 	TexDesc.MiscFlags = 0
+	TexDesc.ClearValue = {Color = {r=0.1, g=0.1, b=0.1, a=0.1}}
 	tex2DAverageLuminance = Texture.Create(TexDesc)
 	tex2DAverageLuminanceSRV = tex2DAverageLuminance:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
 	tex2DAverageLuminanceRTV = tex2DAverageLuminance:GetDefaultView("TEXTURE_VIEW_RENDER_TARGET")
@@ -287,10 +340,10 @@ end
 
 function CreateSliceUVDirAndOriginTexture(NumEpipolarSlices, NumCascades)
 	tex2DSliceUVDirAndOrigin = Texture.Create{
-		Type = "TEXTURE_TYPE_2D", 
+		Type = "RESOURCE_DIM_TEX_2D", 
 		Width = NumEpipolarSlices, 
 		Height = NumCascades,
-		Format = "TEX_FORMAT_RGBA32_FLOAT",
+		Format = SliceUVDirAndOriginTexFmt,
 		MipLevels = 1,
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"}
@@ -307,10 +360,10 @@ end
 
 function CreateAmbientSkyLightTexture(AmbientSkyLightTexDim)
 	tex2DAmbientSkyLight = Texture.Create{
-		Type = "TEXTURE_TYPE_2D", 
+		Type = "RESOURCE_DIM_TEX_2D", 
 		Width = AmbientSkyLightTexDim, 
 		Height = 1,
-		Format = "TEX_FORMAT_RGBA16_FLOAT",
+		Format = AmbientSkyLightTexFmt,
 		MipLevels = 1,
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"}
@@ -330,7 +383,8 @@ function CreateShader(File, Entry, ShaderType)
 				SourceLanguage = "SHADER_SOURCE_LANGUAGE_HLSL",
 				Desc = {
 					ShaderType = ShaderType,
-					Name = "LightScattering.lua:" .. Entry
+					Name = "LightScattering.lua:" .. Entry,
+					DefaultVariableType = "SHADER_VARIABLE_TYPE_STATIC"
 				}
 			}
 end
@@ -348,15 +402,38 @@ ScreenSizeQuadDrawAttrs = DrawAttribs.Create{
     Topology = "PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP"
 }
 
-function RenderScreenSizeQuad(PixelShader, DSS, StencilRef, BS, NumQuads)
-	
-	Context.SetRasterizerState(SolidFillNoCullRS)
-	Context.SetDepthStencilState(DSS, StencilRef)
-	Context.SetBlendState(BS)
+function CreateScreenSizeQuadPSO(_Name, PixelShader, DSSDesc, BSDesc, RTVFmts, DSVFmt)
+	return PipelineState.Create
+	{
+		Name = _Name,
+		GraphicsPipeline = 
+		{
+			RasterizerDesc = 
+			{
+				FillMode = "FILL_MODE_SOLID",
+				CullMode = "CULL_MODE_NONE",
+				FrontCounterClockwise = true
+			},
+			DepthStencilDesc = DSSDesc,
+			BlendDesc = BSDesc,
+			pVS = ScreenSizeQuadVS,
+			pPS = PixelShader,
+			RTVFormats = RTVFmts,
+			DSVFormat = DSVFmt
+		}
+	}
+end
 
-	--Context.SetInputLayout(nil)
+function RenderScreenSizeQuad(PSO, StencilRef, NumQuads, SRB)
 
-	Context.SetShaders(ScreenSizeQuadVS, PixelShader)
+	Context.SetPipelineState(PSO)
+	if SRB == nil then
+		Context.CommitShaderResources()
+	else
+		Context.CommitShaderResources(SRB)
+	end
+
+	Context.SetStencilRef(StencilRef)
 
 	ScreenSizeQuadDrawAttrs.NumInstances = NumQuads or 1
 	Context.Draw(ScreenSizeQuadDrawAttrs)
@@ -365,11 +442,12 @@ end
 
 -----------------------------------[ Precomputing Optical Depth ]-----------------------------------
 PrecomputeNetDensityToAtmTopPS = CreatePixelShader("Precomputation.fx", "PrecomputeNetDensityToAtmTopPS")
+PrecomputeNetDensityToAtmTopPSO = CreateScreenSizeQuadPSO("PrecomputeNetDensityToAtmTop", PrecomputeNetDensityToAtmTopPS, DisableDepthDesc, DefaultBlendDesc, "TEX_FORMAT_RG32_FLOAT")
 
 function PrecomputeNetDensityToAtmTop(NumPrecomputedHeights, NumPrecomputedAngles)
 	
 	tex2DOccludedNetDensityToAtmTop = Texture.Create{
-		Type = "TEXTURE_TYPE_2D", 
+		Type = "RESOURCE_DIM_TEX_2D", 
 		Width = NumPrecomputedHeights, Height = NumPrecomputedAngles,
 		Format = "TEX_FORMAT_RG32_FLOAT",
 		MipLevels = 1,
@@ -381,7 +459,7 @@ function PrecomputeNetDensityToAtmTop(NumPrecomputedHeights, NumPrecomputedAngle
 	-- Bind required resources
 	PrecomputeNetDensityToAtmTopPS:BindResources(extResourceMapping, "BIND_SHADER_RESOURCES_ALL_RESOLVED")
 	-- Render quad
-	RenderScreenSizeQuad(PrecomputeNetDensityToAtmTopPS, DisableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(PrecomputeNetDensityToAtmTopPSO, 0)
 	-- Get SRV	
 	tex2DOccludedNetDensityToAtmTopSRV = tex2DOccludedNetDensityToAtmTop:GetDefaultView("TEXTURE_VIEW_SHADER_RESOURCE")
 	-- Set linear sampler
@@ -398,8 +476,8 @@ end
 
 function WindowResize(BackBufferWidth, BackBufferHeight)
 	ptex2DCamSpaceZ = Texture.Create{
-		Type = "TEXTURE_TYPE_2D", Width = BackBufferWidth, Height = BackBufferHeight,
-		Format = "TEX_FORMAT_R32_FLOAT",
+		Type = "RESOURCE_DIM_TEX_2D", Width = BackBufferWidth, Height = BackBufferHeight,
+		Format = CamSpaceZFmt,
 		MipLevels = 1,
 		Usage = "USAGE_DEFAULT",
 		BindFlags = {"BIND_RENDER_TARGET", "BIND_SHADER_RESOURCE"}
@@ -418,17 +496,32 @@ end
 
 
 
+function CreateReconstructCameraSpaceZPSO(ReconstructCameraSpaceZPS)
+	ReconstructCameraSpaceZPSO = CreateScreenSizeQuadPSO("ReconstructCameraSpaceZ", ReconstructCameraSpaceZPS, DisableDepthDesc, DefaultBlendDesc, CamSpaceZFmt)	
+end
+
 function ReconstructCameraSpaceZ(ReconstructCameraSpaceZPS)
 	Context.SetRenderTargets(ptex2DCamSpaceZRTV)
-	RenderScreenSizeQuad(ReconstructCameraSpaceZPS, DisableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(ReconstructCameraSpaceZPSO, 0)
 end
 
-function RenderSliceEndPoints(RenderSliceEndPointsPS)
+
+
+function CreateRenderSliceEndPointsPSO(RenderSliceEndPointsPS)
+	RenderSliceEndPointsPSO = CreateScreenSizeQuadPSO("RenderSliceEndPoints", RenderSliceEndPointsPS, DisableDepthDesc, DefaultBlendDesc, SliceEndpointsFmt)	
+end
+
+function RenderSliceEndPoints()
 	Context.SetRenderTargets(tex2DSliceEndpointsRTV)
-	RenderScreenSizeQuad(RenderSliceEndPointsPS, DisableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(RenderSliceEndPointsPSO, 0)
 end
 
-function RenderCoordinateTexture(RenderCoordinateTexturePS)
+
+function CreateRenderCoordinateTexturePSO(RenderCoordinateTexturePS)
+	RenderCoordinateTexturePSO = CreateScreenSizeQuadPSO("RenderCoordinateTexture", RenderCoordinateTexturePS, IncStencilAlwaysDSSDesc, DefaultBlendDesc, {CoordinateTexFmt, EpipolarCamSpaceZFmt}, EpipolarImageDepthFmt)	
+end
+
+function RenderCoordinateTexture()
 	Context.SetRenderTargets(tex2DCoordinateTextureRTV, tex2DEpipolarCamSpaceZRTV, tex2DEpipolarImageDSV)
 	-- Clear both render targets with values that can't be correct projection space coordinates and camera space Z:
 	Context.ClearRenderTarget(tex2DCoordinateTextureRTV, -1e+30, -1e+30, -1e+30, -1e+30)
@@ -437,82 +530,150 @@ function RenderCoordinateTexture(RenderCoordinateTexturePS)
     -- Depth stencil state is configured to always increment stencil value. If coordinates are outside the screen,
     -- the pixel shader discards the pixel and stencil value is left untouched. All such pixels will be skipped from
     -- further processing
-	RenderScreenSizeQuad(RenderCoordinateTexturePS, IncStencilAlwaysDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(RenderCoordinateTexturePSO, 0)
 end
 
-function RenderCoarseUnshadowedInctr(RenderCoarseUnshadowedInctrPS)
-	RenderScreenSizeQuad(RenderCoarseUnshadowedInctrPS, StencilEqKeepStencilDSS, 1, DefaultBS)
+
+
+function CreateRenderCoarseUnshadowedInsctrAndExtinctionPSO(RenderCoarseUnshadowedInctrPS)
+	RenderCoarseUnshadowedInctrPSO = CreateScreenSizeQuadPSO("RenderCoarseUnshadowedInsctrAndExtinction", RenderCoarseUnshadowedInctrPS, StencilEqKeepStencilDSSDesc, DefaultBlendDesc, {EpipolarInsctrTexFmt, EpipolarExtinctionFmt}, EpipolarImageDepthFmt)
 end
 
-function MarkRayMarchingSamples(MarkRayMarchingSamplesPS)
+function CreateRenderCoarseUnshadowedInsctrPSO(RenderCoarseUnshadowedInctrPS)
+	RenderCoarseUnshadowedInctrPSO = CreateScreenSizeQuadPSO("RenderCoarseUnshadowedInctr", RenderCoarseUnshadowedInctrPS, StencilEqKeepStencilDSSDesc, DefaultBlendDesc, EpipolarInsctrTexFmt, EpipolarImageDepthFmt)
+end
+
+function RenderCoarseUnshadowedInctr()
+	RenderScreenSizeQuad(RenderCoarseUnshadowedInctrPSO, 1)
+end
+
+
+
+function CreateMarkRayMarchingSamplesPSO(MarkRayMarchingSamplesPS)
+	MarkRayMarchingSamplesPSO = CreateScreenSizeQuadPSO("MarkRayMarchingSamples", MarkRayMarchingSamplesPS, StencilEqIncStencilDSSDesc, DefaultBlendDesc, {}, EpipolarImageDepthFmt)
+end
+
+function MarkRayMarchingSamples()
 	Context.SetRenderTargets(tex2DEpipolarImageDSV)
-	RenderScreenSizeQuad(MarkRayMarchingSamplesPS, StencilEqIncStencilDSS, 1, DefaultBS)
+	RenderScreenSizeQuad(MarkRayMarchingSamplesPSO, 1)
 end
 
-function RenderSliceUVDirAndOrigin(RenderSliceUVDirAndOriginPS)
+
+
+function CreateRenderSliceUVDirAndOriginPSO(RenderSliceUVDirAndOriginPS)
+	RenderSliceUVDirAndOriginPSO = CreateScreenSizeQuadPSO("RenderSliceUVDirAndOrigin", RenderSliceUVDirAndOriginPS, DisableDepthDesc, DefaultBlendDesc, SliceUVDirAndOriginTexFmt)	
+end
+
+function RenderSliceUVDirAndOrigin()
 	Context.SetRenderTargets(tex2DSliceUVDirAndOriginRTV)
-	RenderScreenSizeQuad(RenderSliceUVDirAndOriginPS, DisableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(RenderSliceUVDirAndOriginPSO, 0)
 end
 
-function InitMinMaxShadowMap(InitMinMaxShadowMapPS)
-	RenderScreenSizeQuad(InitMinMaxShadowMapPS, DisableDepthDSS, 0, DefaultBS)
+
+function CreateInitMinMaxShadowMapPSO(InitMinMaxShadowMapPS, MinMaxShadowMapFmt)
+	InitMinMaxShadowMapPSO = CreateScreenSizeQuadPSO("InitMinMaxShadowMap", InitMinMaxShadowMapPS, DisableDepthDesc, DefaultBlendDesc, MinMaxShadowMapFmt)
 end
 
-function ComputeMinMaxShadowMapLevel(ComputeMinMaxShadowMapLevelPS)
-	RenderScreenSizeQuad(ComputeMinMaxShadowMapLevelPS, DisableDepthDSS, 0, DefaultBS)
+function InitMinMaxShadowMap()
+	RenderScreenSizeQuad(InitMinMaxShadowMapPSO, 0)
 end
+
+
+
+function CreateComputeMinMaxShadowMapLevelPSO(ComputeMinMaxShadowMapLevelPS, MinMaxShadowMapFmt)
+	ComputeMinMaxShadowMapLevelPSO = CreateScreenSizeQuadPSO("ComputeMinMaxShadowMapLevel", ComputeMinMaxShadowMapLevelPS, DisableDepthDesc, DefaultBlendDesc, MinMaxShadowMapFmt)
+end
+
+function ComputeMinMaxShadowMapLevel(SRB)
+	RenderScreenSizeQuad(ComputeMinMaxShadowMapLevelPSO, 0, 1, SRB)
+end
+
+
 
 function ClearInitialScatteredLight()
 	-- On GL, we need to bind render target to pipeline to clear it
 	Context.SetRenderTargets(tex2DInitialScatteredLightRTV)
 	Context.ClearRenderTarget(tex2DInitialScatteredLightRTV, 0,0,0,0)
 end
-function RayMarch(RayMarchPS, NumQuads)
+
+
+
+RayMarchPSO = {}
+function CreateRayMarchPSO(RayMarchPS, Use1DMinMaxTree)
+	RayMarchPSO[Use1DMinMaxTree] = CreateScreenSizeQuadPSO("RayMarch", RayMarchPS, StencilEqKeepStencilDSSDesc, AdditiveBlendBSDesc, EpipolarInsctrTexFmt, EpipolarImageDepthFmt )
+end
+
+function RayMarch(Use1DMinMaxTree, NumQuads)
 	Context.SetRenderTargets(tex2DInitialScatteredLightRTV, tex2DEpipolarImageDSV)
-	RenderScreenSizeQuad(RayMarchPS, StencilEqKeepStencilDSS, 2, AdditiveBlendBS, NumQuads)
+	RenderScreenSizeQuad(RayMarchPSO[Use1DMinMaxTree], 2, NumQuads)
 end
 
 
-function InterpolateIrradiance(InterpolateIrradiancePS)
+
+function CreateInterpolateIrradiancePSO(InterpolateIrradiancePS)
+	InterpolateIrradiancePSO = CreateScreenSizeQuadPSO("InterpolateIrradiance", InterpolateIrradiancePS, DisableDepthDesc, DefaultBlendDesc, EpipolarInsctrTexFmt)
+end
+
+function InterpolateIrradiance()
 	Context.SetRenderTargets(tex2DEpipolarInscatteringRTV)
-	RenderScreenSizeQuad(InterpolateIrradiancePS, DisableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(InterpolateIrradiancePSO, 0)
 end
 
 
-function UnwarpAndRenderLuminance(UnwarpAndRenderLuminancePS)
+function CreateUnwarpAndRenderLuminancePSO(UnwarpAndRenderLuminancePS)
+	UnwarpAndRenderLuminancePSO = CreateScreenSizeQuadPSO("UnwarpAndRenderLuminance", UnwarpAndRenderLuminancePS, DisableDepthDesc, DefaultBlendDesc, LuminanceTexFmt)
+end
+
+function UnwarpAndRenderLuminance()
 	-- Disable depth testing - we need to render the entire image in low resolution
-	RenderScreenSizeQuad(UnwarpAndRenderLuminancePS, DisableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(UnwarpAndRenderLuminancePSO, 0)
 end
 
-function UnwarpEpipolarScattering(UnwarpEpipolarScatteringPS)
+
+function CreateUnwarpEpipolarScatteringPSO(UnwarpEpipolarScatteringPS)
+	UnwarpEpipolarScatteringPSO = CreateScreenSizeQuadPSO("UnwarpEpipolarScattering", UnwarpEpipolarScatteringPS, EnableDepthDesc, DefaultBlendDesc, MainBackBufferFmt, MainDepthBufferFmt)
+end
+
+function UnwarpEpipolarScattering()
 	-- Enable depth testing to write 0.0 to the depth buffer. All pixel that require 
 	-- inscattering correction (if enabled) will be discarded, so that 1.0 will be retained
 	-- This 1.0 will then be used to perform inscattering correction
-	RenderScreenSizeQuad(UnwarpEpipolarScatteringPS, EnableDepthDSS, 0, DefaultBS)
+	RenderScreenSizeQuad(UnwarpEpipolarScatteringPSO, 0)
+end
+
+FixInscatteringAtDepthBreaksPSO = {}
+function CreateFixInscatteringAtDepthBreaksPSO(FixInsctrAtDepthBreaksPS, FixInsctrAtDepthBreaksLumOnlyPS)
+	-- Luminance Only
+	-- Disable depth and stencil tests to render all pixels
+	-- Use default blend state to overwrite old luminance values
+	FixInscatteringAtDepthBreaksPSO[0] = CreateScreenSizeQuadPSO("FixInsctrAtDepthBreaksLumOnly", FixInsctrAtDepthBreaksLumOnlyPS, DisableDepthDesc, DefaultBlendDesc, LuminanceTexFmt)
+
+	-- Fix Inscattering
+	-- Depth breaks are marked with 1.0 in depth, so we enable depth test
+	-- to render only pixels that require correction
+	-- Use default blend state - the rendering is always done in single pass
+	FixInscatteringAtDepthBreaksPSO[1] = CreateScreenSizeQuadPSO("FixInsctrAtDepthBreaks", FixInsctrAtDepthBreaksPS, EnableDepthDesc, DefaultBlendDesc, MainBackBufferFmt, MainDepthBufferFmt)
+
+	-- Full Screen Ray Marching
+	-- Disable depth and stencil tests since we are performing 
+	-- full screen ray marching
+	-- Use default blend state - the rendering is always done in single pass
+	FixInscatteringAtDepthBreaksPSO[2] = CreateScreenSizeQuadPSO("FixInsctrAtDepthBreaks", FixInsctrAtDepthBreaksPS, DisableDepthDesc, DefaultBlendDesc, MainBackBufferFmt)
+end
+
+function FixInscatteringAtDepthBreaks(Mode)
+	RenderScreenSizeQuad(FixInscatteringAtDepthBreaksPSO[Mode], 0)
 end
 
 
-function FixInscatteringAtDepthBreaks(FixInsctrAtDepthBreaksPS, Mode)
-	if Mode == 0 then -- Luminance Only
-		-- Disable depth and stencil tests to render all pixels
-		-- Use default blend state to overwrite old luminance values
-		RenderScreenSizeQuad(FixInsctrAtDepthBreaksPS, DisableDepthDSS, 0, DefaultBS)
-	elseif Mode == 1 then -- Fix Inscattering
-		-- Depth breaks are marked with 1.0 in depth, so we enable depth test
-		-- to render only pixels that require correction
-		-- Use default blend state - the rendering is always done in single pass
-		RenderScreenSizeQuad(FixInsctrAtDepthBreaksPS, EnableDepthDSS, 0, DefaultBS)
-	elseif Mode == 2 then -- Full Screen Ray Marching
-		-- Disable depth and stencil tests since we are performing 
-		-- full screen ray marching
-		-- Use default blend state - the rendering is always done in single pass
-		RenderScreenSizeQuad(FixInsctrAtDepthBreaksPS, DisableDepthDSS, 0, DefaultBS)
-	end
+
+function CreateUpdateAverageLuminancePSO(UpdateAverageLuminancePS)
+	UpdateAverageLuminancePSO = CreateScreenSizeQuadPSO("UpdateAverageLuminance", UpdateAverageLuminancePS, DisableDepthDesc, AlphaBlendBSDesc, LuminanceTexFmt)
 end
 
-function UpdateAverageLuminance(UpdateAverageLuminancePS)
+function UpdateAverageLuminance()
 	Context.SetRenderTargets(tex2DAverageLuminanceRTV)
-	RenderScreenSizeQuad(UpdateAverageLuminancePS, DisableDepthDSS, 0, AlphaBlendBS)
+	RenderScreenSizeQuad(UpdateAverageLuminancePSO, 0)
 end
 
 SampleLocationsDrawAttrs = DrawAttribs.Create{
@@ -520,15 +681,30 @@ SampleLocationsDrawAttrs = DrawAttribs.Create{
     Topology = "PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP"
 }
 
-function RenderSampleLocations(RenderSampleLocationsVS, RenderSampleLocationsPS, TotalSamples)
-	Context.SetRasterizerState(SolidFillNoCullRS)
-	Context.SetDepthStencilState(DisableDepthDSS)
-	Context.SetBlendState(AlphaBlendBS)
 
-	--Context.SetInputLayout(nil)
+function CreateRenderSampleLocationsPSO(RenderSampleLocationsVS, RenderSampleLocationsPS)
+	RenderSampleLocationsPSO = PipelineState.Create
+	{
+		GraphicsPipeline = 
+		{
+			RasterizerDesc = 
+			{
+				FillMode = "FILL_MODE_SOLID",
+				CullMode = "CULL_MODE_NONE",
+				FrontCounterClockwise = true
+			},
+			DepthStencilDesc = DisableDepthDesc,
+			BlendDesc = AlphaBlendBSDesc,
+			pVS = RenderSampleLocationsVS,
+			pPS = RenderSampleLocationsPS,
+			RTVFormats = MainBackBufferFmt
+		}
+	}
+end
 
-	Context.SetShaders(RenderSampleLocationsVS, RenderSampleLocationsPS)
-
+function RenderSampleLocations(TotalSamples)
+	Context.SetPipelineState(RenderSampleLocationsPSO)
+	Context.CommitShaderResources()
 	SampleLocationsDrawAttrs.NumInstances = TotalSamples
 	Context.Draw(SampleLocationsDrawAttrs)
 end
@@ -536,21 +712,42 @@ end
 SunVS = CreateVertexShader("Sun.fx", "SunVS")
 SunPS = CreatePixelShader("Sun.fx", "SunPS")
 
+RenderSunPSO = PipelineState.Create
+{
+	Name = "Render Sun",
+	GraphicsPipeline = 
+	{
+		RasterizerDesc = 
+		{
+			FillMode = "FILL_MODE_SOLID",
+			CullMode = "CULL_MODE_NONE",
+			FrontCounterClockwise = true
+		},
+		DepthStencilDesc = CmpEqNoWritesDSSDesc,
+		BlendDesc = DefaultBlendDesc,
+		pVS = SunVS,
+		pPS = SunPS,
+		RTVFormats =  OffscreenBackBufferFmt,
+		DSVFormat = MainDepthBufferFmt
+	}
+}
+
 function RenderSun()
-	Context.SetRasterizerState(SolidFillNoCullRS)
-	Context.SetDepthStencilState(CmpEqNoWritesDSS)
-	Context.SetBlendState(DefaultBS)
+	Context.SetPipelineState(RenderSunPSO)
 
-	--Context.SetInputLayout(nil)
-
-	Context.SetShaders(SunVS, SunPS)
 	SunVS:BindResources(extResourceMapping, "BIND_SHADER_RESOURCES_ALL_RESOLVED")
 	SunPS:BindResources(extResourceMapping, "BIND_SHADER_RESOURCES_ALL_RESOLVED")
+	
+	Context.CommitShaderResources()
 
 	ScreenSizeQuadDrawAttrs.NumInstances = 1
 	Context.Draw(ScreenSizeQuadDrawAttrs)
 end
 
-function PrecomputeAmbientSkyLight(PrecomputeAmbientSkyLightPS)
-	RenderScreenSizeQuad(PrecomputeAmbientSkyLightPS, DisableDepthDSS, 0, DefaultBS)
+function CreatePrecomputeAmbientSkyLightPSO(PrecomputeAmbientSkyLightPS)
+	PrecomputeAmbientSkyLightPSO = CreateScreenSizeQuadPSO("PrecomputeAmbientSkyLight", PrecomputeAmbientSkyLightPS, DisableDepthDesc, DefaultBlendDesc, AmbientSkyLightTexFmt)
+end
+
+function PrecomputeAmbientSkyLight()
+	RenderScreenSizeQuad(PrecomputeAmbientSkyLightPSO, 0)
 end

@@ -199,4 +199,7 @@
       <Filter>assets\Terrain\Tiles</Filter>
     </Image>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="$(MSBuildThisFileDirectory)..\..\..\CMakeLists.txt" />
+  </ItemGroup>
 </Project>

@@ -165,4 +165,7 @@
     <Image Include="$(MSBuildThisFileDirectory)assets\Terrain\Tiles\snow_DM.dds" />
     <Image Include="$(MSBuildThisFileDirectory)assets\Terrain\Tiles\Snow_NM.jpg" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="$(MSBuildThisFileDirectory)..\..\..\CMakeLists.txt" />
+  </ItemGroup>
 </Project>

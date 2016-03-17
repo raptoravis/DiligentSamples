@@ -14,8 +14,14 @@ float3 ComputeNormal(int2 i2ElevMapIJ,
                      float fSampleSpacingInterval,
                      int MIPLevel)
 {
-    int MipWidth, MipHeight, Levels;
-    g_tex2DElevationMap.GetDimensions( MIPLevel, MipWidth, MipHeight, Levels );
+    int MipWidth, MipHeight;
+    // This version of GetDimensions() does not work on D3D12. Looks like a bug
+    // in shader compiler
+    //g_tex2DElevationMap.GetDimensions( MIPLevel, MipWidth, MipHeight, Levels );
+    g_tex2DElevationMap.GetDimensions( MipWidth, MipHeight );
+    MipWidth = MipWidth >> MIPLevel;
+    MipHeight = MipHeight >> MIPLevel;
+
     int i0  = i2ElevMapIJ.x;
     int i1  = min( i0 + 1, MipWidth - 1 );
     int i_1 = max( i0 - 1, 0 );

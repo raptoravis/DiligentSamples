@@ -42,4 +42,7 @@
     <ClInclude Include="$(MSBuildThisFileDirectory)..\..\..\Src\WindowsStore\SampleAppMain.h" />
     <ClInclude Include="$(MSBuildThisFileDirectory)..\..\..\Src\WindowsStore\TwEventWinRT.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="$(MSBuildThisFileDirectory)..\..\..\CMakeLists.txt" />
+  </ItemGroup>
 </Project>

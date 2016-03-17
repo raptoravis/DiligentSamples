@@ -1736,7 +1736,7 @@ std::string& CTwMgr::CLibStdString::ToLib()
 //  ---------------------------------------------------------------------------
 
 
-static int TwCreateGraph()
+static int TwCreateGraph(int BackBufferFormat)
 {
     assert( g_TwMgr!=NULL && g_TwMgr->m_Graph==NULL );
 
@@ -1754,7 +1754,7 @@ static int TwCreateGraph()
         return 0;
     }
     else
-        return g_TwMgr->m_Graph->Init();
+        return g_TwMgr->m_Graph->Init(BackBufferFormat);
 }
 
 //  ---------------------------------------------------------------------------
@@ -1860,7 +1860,7 @@ static int TwInitMgr()
 }
 
 
-int ANT_CALL TwInit(ETwGraphAPI _GraphAPI, void *_Device, void *_ImmediateContext)
+int ANT_CALL TwInit(ETwGraphAPI _GraphAPI, void *_Device, void *_ImmediateContext, int BackBufferFormat)
 {
 #if defined(_DEBUG) && (defined(ANT_WINDOWS) || defined(ANT_WINDOWS_STORE))
     _CrtSetDbgFlag(_CRTDBG_LEAK_CHECK_DF|_CrtSetDbgFlag(_CRTDBG_LEAK_CHECK_DF));
@@ -1881,7 +1881,7 @@ int ANT_CALL TwInit(ETwGraphAPI _GraphAPI, void *_Device, void *_ImmediateContex
     TwGenerateDefaultFonts(g_FontScaling);
     g_TwMgr->m_CurrentFont = g_DefaultNormalFont;
 
-    int Res = TwCreateGraph();
+    int Res = TwCreateGraph(BackBufferFormat);
     if( Res )
         Res = TwInitMgr();
     

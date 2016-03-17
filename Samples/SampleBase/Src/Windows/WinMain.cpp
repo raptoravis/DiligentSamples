@@ -1,4 +1,4 @@
-/*     Copyright 2015 Egor Yusov
+/*     Copyright 2015-2016 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -25,10 +25,10 @@
 #include <Windows.h>
 #include "SampleBase.h"
 #include "RenderDeviceFactoryD3D11.h"
+#include "RenderDeviceFactoryD3D12.h"
 #include "RenderDeviceFactoryOpenGL.h"
 #include "Timer.h"
 
-using namespace Diligent;
 using namespace Diligent;
 
 #define TW_STATIC
@@ -39,30 +39,47 @@ std::unique_ptr<SampleBase> g_pSample;
 LRESULT CALLBACK MessageProc(HWND, UINT, WPARAM, LPARAM);
 
 // Create Direct3D device and swap chain
-void InitDevice(HWND hWnd, IRenderDevice **ppRenderDevice, IDeviceContext **ppImmediateContext,  ISwapChain **ppSwapChain, bool bUseOpenGL)
+void InitDevice(HWND hWnd, IRenderDevice **ppRenderDevice, IDeviceContext **ppImmediateContext,  ISwapChain **ppSwapChain, DeviceType DevType)
 {
     EngineCreationAttribs EngineCreationAttribs;
     EngineCreationAttribs.strShaderCachePath = "bin\\tmp\\ShaderCache";
     SwapChainDesc SwapChainDesc;
     SwapChainDesc.SamplesCount = 1;
-    if( bUseOpenGL )
+    switch (DevType)
     {
+        case DeviceType::D3D11:
+        {
+            EngineD3D11Attribs DeviceAttribs;
+            DeviceAttribs.DebugFlags = (Uint32)EngineD3D11DebugFlags::VerifyCommittedShaderResources |
+                                       (Uint32)EngineD3D11DebugFlags::VerifyCommittedResourceRelevance;
+
 #ifdef ENGINE_DLL
-        CreateDeviceAndSwapChainGLType CreateDeviceAndSwapChainGL;
-        LoadGraphicsEngineOpenGL(CreateDeviceAndSwapChainGL);
+            CreateDeviceAndImmediateContextD3D11Type CreateDeviceAndImmediateContextD3D11;
+            CreateSwapChainD3D11Type CreateSwapChainD3D11;
+            LoadGraphicsEngineD3D11(CreateDeviceAndImmediateContextD3D11, CreateSwapChainD3D11);
 #endif
-        CreateDeviceAndSwapChainGL(
-            EngineCreationAttribs, ppRenderDevice, ppImmediateContext, SwapChainDesc, hWnd, ppSwapChain );
-    }
-    else
-    {
+            CreateDeviceAndImmediateContextD3D11( DeviceAttribs, ppRenderDevice, ppImmediateContext );
+            CreateSwapChainD3D11( *ppRenderDevice, *ppImmediateContext, SwapChainDesc, hWnd, ppSwapChain );
+        }
+        break;
+
+        case DeviceType::D3D12:
+            CreateDeviceAndImmediateContextD3D12( EngineCreationAttribs, ppRenderDevice, ppImmediateContext );
+            CreateSwapChainD3D12( *ppRenderDevice, *ppImmediateContext, SwapChainDesc, hWnd, ppSwapChain );
+        break;
+
+        case DeviceType::OpenGL:
 #ifdef ENGINE_DLL
-        CreateDeviceAndImmediateContextD3D11Type CreateDeviceAndImmediateContextD3D11;
-        CreateSwapChainD3D11Type CreateSwapChainD3D11;
-        LoadGraphicsEngineD3D11(CreateDeviceAndImmediateContextD3D11, CreateSwapChainD3D11);
+            CreateDeviceAndSwapChainGLType CreateDeviceAndSwapChainGL;
+            LoadGraphicsEngineOpenGL(CreateDeviceAndSwapChainGL);
 #endif
-        CreateDeviceAndImmediateContextD3D11(EngineCreationAttribs, ppRenderDevice, ppImmediateContext);
-        CreateSwapChainD3D11( *ppRenderDevice, *ppImmediateContext, SwapChainDesc, hWnd, ppSwapChain );
+            CreateDeviceAndSwapChainGL(
+                EngineCreationAttribs, ppRenderDevice, ppImmediateContext, SwapChainDesc, hWnd, ppSwapChain );
+        break;
+
+        default:
+            LOG_ERROR_AND_THROW("Unknown device type");
+        break;
     }
 }
 
@@ -74,18 +91,43 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmdShow)
 #if defined(_DEBUG) || defined(DEBUG)
     _CrtSetDbgFlag( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
+    
+    std::wstring Title = L"Graphics engine sample";
 
-    bool bUseOpenGL = true;
+    DeviceType DevType = DeviceType::Undefined;
     std::wstring CmdLine = GetCommandLine();
-    std::wstring Key = L"UseOpenGL=";
+    std::wstring Key = L"mode=";
     auto pos = CmdLine.find( Key );
     if( pos != std::string::npos )
     {
         pos += Key.length();
-        auto Val = CmdLine.substr( pos, 4 );
-        bUseOpenGL = (Val == std::wstring( L"true" ));
+        auto Val = CmdLine.substr( pos );
+        if(Val == L"D3D11")
+        {
+            DevType = DeviceType::D3D11;
+            Title.append( L" (D3D11)" );
+        }
+        else if(Val == L"D3D12")
+        {
+            DevType = DeviceType::D3D12;
+            Title.append( L" (D3D12)" );
+        }
+        else if(Val == L"GL")
+        {
+            DevType = DeviceType::OpenGL;
+            Title.append( L" (OpenGL)" );
+        }
+        else
+        {
+            LOG_ERROR("Unknown device type. Only the following types are supported: D3D11, D3D12, GL")
+            return -1;
+        }
     }
-
+    else
+    {
+        LOG_INFO_MESSAGE("Device type is not specified. Using OpenGL device");
+        DevType = DeviceType::OpenGL;
+    }
     // Register our window class
     WNDCLASSEX wcex = { sizeof(WNDCLASSEX), CS_HREDRAW|CS_VREDRAW, MessageProc,
                         0L, 0L, instance, NULL, NULL, NULL, NULL, L"SampleApp", NULL };
@@ -94,7 +136,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmdShow)
     // Create a window
     RECT rc = { 0, 0, 1280, 1024 };
     AdjustWindowRect(&rc, WS_OVERLAPPEDWINDOW, FALSE);
-    HWND wnd = CreateWindow(L"SampleApp", bUseOpenGL ? L"Graphics engine sample (OpenGL)" : L"Graphics engine sample (DirectX)", 
+    HWND wnd = CreateWindow(L"SampleApp", Title.c_str(), 
                             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 
                             rc.right-rc.left, rc.bottom-rc.top, NULL, NULL, instance, NULL);
     if (!wnd)
@@ -108,7 +150,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmdShow)
     RefCntAutoPtr<IRenderDevice> pRenderDevice;
     RefCntAutoPtr<IDeviceContext> pDeviceContext;
     Diligent::RefCntAutoPtr<ISwapChain> pSwapChain;
-    InitDevice( wnd, &pRenderDevice, &pDeviceContext, &pSwapChain, bUseOpenGL );
+    InitDevice( wnd, &pRenderDevice, &pDeviceContext, &pSwapChain, DevType );
     g_pSwapChain = pSwapChain;
 
     // Initialize AntTweakBar
@@ -117,7 +159,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE, LPSTR, int cmdShow)
     // odd offsets which distorts everything
     // Latest OpenGL works very much like Direct3D11, and 
     // Tweak Bar will never know if D3D or OpenGL is actually used
-    if (!TwInit(TW_DIRECT3D11, pRenderDevice.RawPtr(), pDeviceContext.RawPtr()))
+    if (!TwInit(TW_DIRECT3D11, pRenderDevice.RawPtr(), pDeviceContext.RawPtr(), pSwapChain->GetDesc().ColorBufferFormat))
     {
         MessageBoxA(wnd, TwGetLastError(), "AntTweakBar initialization failed", MB_OK|MB_ICONERROR);
         return 0;

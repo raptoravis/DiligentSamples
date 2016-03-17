@@ -102,7 +102,7 @@ static void BindFont(IRenderDevice *_Dev, const CTexFont *_Font, ITexture**_Tex)
         *p = 0x00ffffff | (((color32)(_Font->m_TexBytes[i]))<<24);
 
     TextureDesc desc;
-    desc.Type = TEXTURE_TYPE_2D;
+    desc.Type = RESOURCE_DIM_TEX_2D;
     desc.Width = w;
     desc.Height = h;
     desc.MipLevels = 1;
@@ -135,7 +135,7 @@ static void UnbindFont(IRenderDevice *_Dev, RefCntAutoPtr<ITexture> &_Tex, IShad
 //  ---------------------------------------------------------------------------
 
 
-int CTwGraphImpl::Init()
+int CTwGraphImpl::Init(int BackBufferFormat)
 {
     assert(g_TwMgr!=NULL);
     assert(g_TwMgr->m_Device!=NULL);
@@ -145,7 +145,7 @@ int CTwGraphImpl::Init()
     m_pDev = static_cast<IRenderDevice*>(g_TwMgr->m_Device);
     m_pDevImmContext = static_cast<IDeviceContext*>(g_TwMgr->m_ImmediateContext);
     const auto& DevCaps = m_pDev->GetDeviceCaps();
-    m_bIsGLDevice = DevCaps.DevType != DeviceType::DirectX;
+    m_bIsGLDevice = (DevCaps.DevType == DeviceType::D3D11 || DevCaps.DevType == DeviceType::D3D12);
 
     m_Drawing = false;
     m_OffsetX = m_OffsetY = 0;
@@ -189,7 +189,7 @@ int CTwGraphImpl::Init()
 
     try
     {
-        bool bIsDX = m_pDev->GetDeviceCaps().DevType == DeviceType::DirectX;
+        bool bIsDX = (DevCaps.DevType == DeviceType::D3D11 || DevCaps.DevType == DeviceType::D3D12);
         ShaderCreationAttribs CreationAttribs;
 
         CreationAttribs.Source = bIsDX ? g_LineRectVS_DX : g_LineRectVS_GL;
@@ -236,26 +236,6 @@ int CTwGraphImpl::Init()
         return 0;
     }
 
-    try
-    {
-        LayoutDesc lineRectLayout;
-        lineRectLayout.Name = "AntTwBar: vertex layout";
-        LayoutElement Elems[] = 
-        {
-            LayoutElement( 0, 0, 3, VT_FLOAT32, False ),
-            LayoutElement( 1, 0, 4, VT_UINT8, True )
-        };
-        lineRectLayout.LayoutElements = Elems;
-        lineRectLayout.NumElements = _countof( Elems );
-        m_pDev->CreateVertexDescription( lineRectLayout, m_pLineRectVS, &m_pLineRectVertexLayout );
-    }
-    catch( const std::runtime_error& )
-    {
-        g_TwMgr->SetLastError(g_ErrCreateLayout);
-        Shut();
-        return 0;
-    }
-
 
     // Create sampler
     SamplerDesc sd;
@@ -274,37 +254,17 @@ int CTwGraphImpl::Init()
         Shut();
         return 0;
     }
+    
+    PipelineStateDesc PSODesc;
 
+    PSODesc.GraphicsPipeline.NumRenderTargets = 1;
+    PSODesc.GraphicsPipeline.RTVFormats[0] = static_cast<TEXTURE_FORMAT>(BackBufferFormat);
 
-    try
-    {
-        LayoutDesc lineRectLayout;
-        lineRectLayout.Name = "AntTwBar: line rect vertex layout";
-        LayoutElement Elems[] = 
-        {
-            LayoutElement( 0, 0, 3, VT_FLOAT32, False ),
-            LayoutElement( 1, 0, 4, VT_UINT8, True ),
-            LayoutElement( 2, 0, 2, VT_FLOAT32, False ),
-        };
-        lineRectLayout.LayoutElements = Elems;
-        lineRectLayout.NumElements = _countof( Elems );
-        m_pDev->CreateVertexDescription( lineRectLayout, m_pTextVS, &m_pTextVertexLayout );
-    }
-    catch( const std::runtime_error& )
-    {
-        g_TwMgr->SetLastError(g_ErrCreateLayout);
-        Shut();
-        return 0;
-    }
+    DepthStencilStateDesc &DepthStencilDesc = PSODesc.GraphicsPipeline.DepthStencilDesc;
+    DepthStencilDesc.DepthEnable = False;
+    DepthStencilDesc.DepthWriteEnable = False;
 
-    DepthStencilStateDesc DSSDesc;
-    DSSDesc.Name = "AntTwBar: Disable depth DSS";
-    DSSDesc.DepthEnable = False;
-    DSSDesc.DepthWriteEnable = False;
-    m_pDev->CreateDepthStencilState(DSSDesc, &m_pDepthStencilState);
-
-    BlendStateDesc BSDesc;
-    BSDesc.Name = "AntTwBar: alpha blend state";
+    BlendStateDesc &BSDesc = PSODesc.GraphicsPipeline.BlendDesc;
     BSDesc.IndependentBlendEnable = False;
     auto &RT0 = BSDesc.RenderTargets[0];
     RT0.BlendEnable = True;
@@ -315,36 +275,82 @@ int CTwGraphImpl::Init()
     RT0.SrcBlendAlpha   = BLEND_FACTOR_SRC_ALPHA;
     RT0.DestBlendAlpha  = BLEND_FACTOR_INV_SRC_ALPHA;
     RT0.BlendOpAlpha    = BLEND_OPERATION_ADD;
-    m_pDev->CreateBlendState(BSDesc, &m_pBlendState);
     
     // Create rasterizer state object
-    RasterizerStateDesc RSDesc;
-    RSDesc.Name = "AntTwBar: solid fill no cull RS";
-    RSDesc.FillMode = FILL_MODE_SOLID;
-    RSDesc.CullMode = CULL_MODE_NONE;
-    RSDesc.FrontCounterClockwise = True;
-    RSDesc.ScissorEnable = True;
+    RasterizerStateDesc &RasterizerDesc = PSODesc.GraphicsPipeline.RasterizerDesc;
+    RasterizerDesc.FillMode = FILL_MODE_SOLID;
+    RasterizerDesc.CullMode = CULL_MODE_NONE;
+    RasterizerDesc.FrontCounterClockwise = True;
+    RasterizerDesc.ScissorEnable = True;
     //RSDesc.MultisampleEnable = false; // do not allow msaa (fonts would be degraded)
-    RSDesc.AntialiasedLineEnable = False;
-    m_pDev->CreateRasterizerState(RSDesc, &m_pRasterState);
+    RasterizerDesc.AntialiasedLineEnable = False;
 
-    //rd.AntialiasedLineEnable = true;
-    RSDesc.Name = "AntTwBar: solid fill no cull antialiased RS";
-    m_pDev->CreateRasterizerState(RSDesc, &m_pRasterStateAntialiased);
-    RSDesc.AntialiasedLineEnable = False;
+    InputLayoutDesc &lineRectLayout = PSODesc.GraphicsPipeline.InputLayout;
+    PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+    PSODesc.GraphicsPipeline.pVS = m_pTextVS;
+    PSODesc.GraphicsPipeline.pPS = m_pTextPS;
+    LayoutElement TextLayoutElems[] = 
+    {
+        LayoutElement( 0, 0, 3, VT_FLOAT32, False ),
+        LayoutElement( 1, 0, 4, VT_UINT8, True ),
+        LayoutElement( 2, 0, 2, VT_FLOAT32, False ),
+    };
+    lineRectLayout.LayoutElements = TextLayoutElems;
+    lineRectLayout.NumElements = _countof( TextLayoutElems );
+
+    PSODesc.Name = "AntTwBar: text PSO";
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Text)]);
+
+    PSODesc.Name = "AntTwBar: text cst color PSO";
+    PSODesc.GraphicsPipeline.pVS = m_pTextCstColorVS;
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::TextCstColor)]);
+
+
+    LayoutElement LineRectElems[] = 
+    {
+        LayoutElement( 0, 0, 3, VT_FLOAT32, False ),
+        LayoutElement( 1, 0, 4, VT_UINT8, True )
+    };
+    lineRectLayout.LayoutElements = LineRectElems;
+    lineRectLayout.NumElements = _countof( LineRectElems );
+      
+    PSODesc.Name = "AntTwBar: line PSO";
+    PSODesc.GraphicsPipeline.pVS = m_pLineRectVS;
+    PSODesc.GraphicsPipeline.pPS = m_pLineRectPS;
+    PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_LINE;
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Line)]);
+
+    PSODesc.Name = "AntTwBar: line antialiased PSO";
+    //RasterizerDesc.AntialiasedLineEnable = true;
+    RasterizerDesc.AntialiasedLineEnable = False;
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::LineAA)]);
+
+    PSODesc.GraphicsPipeline.pPS = m_pLineRectPS;
+    PSODesc.GraphicsPipeline.PrimitiveTopologyType = PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+
+    PSODesc.GraphicsPipeline.pVS = m_pLineRectCstColorVS;
+    PSODesc.Name = "AntTwBar: triangle cst color PSO";
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Triangle_CstColor)]);
+
+
+    PSODesc.GraphicsPipeline.pVS = m_pLineRectVS;
 
     // the three following raster states allow msaa
     //RSDesc.MultisampleEnable = true;
-    RSDesc.Name = "AntTwBar: solid fill no cull multisample RS";
-    m_pDev->CreateRasterizerState(RSDesc, &m_pRasterStateMultisample);
+    PSODesc.Name = "AntTwBar: line rect multisample PSO";
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Triangle_Multisample)]);
 
-    RSDesc.CullMode = CULL_MODE_BACK;
-    RSDesc.Name = "AntTwBar: solid fill cull back RS";
-    m_pDev->CreateRasterizerState(RSDesc, &m_pRasterStateCullCW);
+    RasterizerDesc.CullMode = CULL_MODE_NONE;
+    PSODesc.Name = "AntTwBar: line rect cull none PSO";
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Triangle_CullNone)]);
 
-    RSDesc.CullMode = CULL_MODE_FRONT;
-    RSDesc.Name = "AntTwBar: solid fill cull front RS";
-    m_pDev->CreateRasterizerState(RSDesc, &m_pRasterStateCullCCW);
+    RasterizerDesc.CullMode = CULL_MODE_BACK;
+    PSODesc.Name = "AntTwBar: line rect cull CW PSO";
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Triangle_CullCW)]);
+
+    RasterizerDesc.CullMode = CULL_MODE_FRONT;
+    PSODesc.Name = "AntTwBar: line rect cull CCW PSO";
+    m_pDev->CreatePipelineState(PSODesc, &m_pPSO[static_cast<int>(PSO_ID::Triangle_CullCCW)]);
 
     return 1;
 }
@@ -357,24 +363,12 @@ int CTwGraphImpl::Shut()
 
     UnbindFont(m_pDev, m_pFontGPUTex, m_psvFont);
 
-    m_pDepthStencilState.Release();
-    m_pBlendState.Release();
-    m_pRasterState.Release();
-    m_pRasterStateAntialiased.Release();
-    m_pRasterStateMultisample.Release();
-    m_pRasterStateCullCW.Release();
-    m_pRasterStateCullCCW.Release();
-
-
     m_pLineRectVS.Release();
     m_pLineRectCstColorVS.Release();
     m_pLineRectPS.Release();
     m_pTextVS.Release();
     m_pTextCstColorVS.Release();
     m_pTextPS.Release();
-
-    m_pLineRectVertexLayout.Release();
-    m_pTextVertexLayout.Release();
 
     m_pLineVertexBuffer.Release();
     m_pRectVertexBuffer.Release();
@@ -419,12 +413,6 @@ void CTwGraphImpl::BeginDraw(int _WndWidth, int _WndHeight)
     m_ViewportAndScissorRects[0] = m_FullRect;
     m_ViewportAndScissorRects[1] = m_FullRect;
     m_pDevImmContext->SetScissorRects(1, m_ViewportAndScissorRects, m_WndWidth, m_WndHeight);
-
-    m_pDevImmContext->SetRasterizerState(m_pRasterState);
-
-    m_pDevImmContext->SetDepthStencilState( m_pDepthStencilState );
-    
-    m_pDevImmContext->SetBlendState(m_pBlendState);
 }
 
 //  ---------------------------------------------------------------------------
@@ -494,10 +482,6 @@ void CTwGraphImpl::DrawLine(int _X0, int _Y0, int _X1, int _Y1, color32 _Color0,
         vertices[1].m_Color = ToR8G8B8A8(_Color1);
         mappedVertices.Unmap();
 
-
-        if( _AntiAliased )
-            m_pDevImmContext->SetRasterizerState(m_pRasterStateAntialiased);
-
         // Reset shader constants
         MapHelper<CConstants> mappedConstBuffer(m_pDevImmContext, m_pConstantBuffer, MAP_WRITE_DISCARD, 0);
         if( mappedConstBuffer )
@@ -514,9 +498,6 @@ void CTwGraphImpl::DrawLine(int _X0, int _Y0, int _X1, int _Y1, color32 _Color0,
             mappedConstBuffer.Unmap();
         }
 
-        // Set the input layout
-        m_pDevImmContext->SetVertexDescription(m_pLineRectVertexLayout);
-
         // Set vertex buffer
         Uint32 stride = sizeof(CLineRectVtx);
         Uint32 offset = 0;
@@ -524,16 +505,16 @@ void CTwGraphImpl::DrawLine(int _X0, int _Y0, int _X1, int _Y1, color32 _Color0,
         m_pDevImmContext->SetVertexBuffers(0, 1, pBuffs, &stride, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
 
         // Render the line
-        IShader *ppShaders[] = { m_pLineRectVS, m_pLineRectPS };
-        m_pDevImmContext->SetShaders(ppShaders, 2);
-        m_pDevImmContext->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        IPipelineState *pPSO = m_pPSO[static_cast<int>(_AntiAliased ? PSO_ID::LineAA : PSO_ID::Line)];
+        m_pDevImmContext->SetPipelineState(pPSO);
+
+        pPSO->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        m_pDevImmContext->CommitShaderResources(nullptr);
+
         DrawAttribs DrawAttribs;
         DrawAttribs.Topology = PRIMITIVE_TOPOLOGY_LINE_LIST;
         DrawAttribs.NumVertices = 2;
         m_pDevImmContext->Draw(DrawAttribs);
-
-        if( _AntiAliased )
-            m_pDevImmContext->SetRasterizerState(m_pRasterState); // restore default raster state
     }
 }
 
@@ -597,9 +578,6 @@ void CTwGraphImpl::DrawRect(int _X0, int _Y0, int _X1, int _Y1, color32 _Color00
             mappedConstBuffer.Unmap();
         }
 
-        // Set the input layout
-        m_pDevImmContext->SetVertexDescription(m_pLineRectVertexLayout);
-
         // Set vertex buffer
         Uint32 stride = sizeof(CLineRectVtx);
         Uint32 offset = 0;
@@ -607,9 +585,10 @@ void CTwGraphImpl::DrawRect(int _X0, int _Y0, int _X1, int _Y1, color32 _Color00
         m_pDevImmContext->SetVertexBuffers(0, 1, ppBuffers, &stride, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
 
         // Render the rect
-        IShader *ppShaders[] = { m_pLineRectVS, m_pLineRectPS };
-        m_pDevImmContext->SetShaders(ppShaders, 2);
-        m_pDevImmContext->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        IPipelineState *pPSO = m_pPSO[static_cast<int>(PSO_ID::Triangle_CullNone)];
+        m_pDevImmContext->SetPipelineState(pPSO);
+        pPSO->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        m_pDevImmContext->CommitShaderResources(nullptr);
 
         DrawAttribs DrawAttribs;
         DrawAttribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
@@ -873,9 +852,6 @@ void CTwGraphImpl::DrawText(void *TextObj, int X, int Y, color32 Color, color32 
             mappedConstBuffer.Unmap();
         }
 
-        // Set the input layout
-        m_pDevImmContext->SetVertexDescription(m_pLineRectVertexLayout);
-
         // Set vertex buffer
         Uint32 stride = sizeof(CLineRectVtx);
         Uint32 offset = 0;
@@ -883,13 +859,14 @@ void CTwGraphImpl::DrawText(void *TextObj, int X, int Y, color32 Color, color32 
         m_pDevImmContext->SetVertexBuffers(0, 1, ppBuffers, &stride, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
 
         // Render the bg rectangles
-        IShader *ppShaders[] = {nullptr, m_pLineRectPS};
+        IPipelineState *pPSO = nullptr;
         if( BgColor!=0 || !textObj->m_LineBgColors ) // use a constant bg color
-            ppShaders[0] = m_pLineRectCstColorVS;
+            pPSO = m_pPSO[static_cast<int>(PSO_ID::Triangle_CstColor)];
         else
-            ppShaders[0] = m_pLineRectVS;
-        m_pDevImmContext->SetShaders(ppShaders, 2);
-        m_pDevImmContext->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+            pPSO = m_pPSO[static_cast<int>(PSO_ID::Triangle_CullNone)];
+        pPSO->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        m_pDevImmContext->SetPipelineState(pPSO);
+        m_pDevImmContext->CommitShaderResources(nullptr);
 
         DrawAttribs DrawAttribs;
         DrawAttribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -913,9 +890,6 @@ void CTwGraphImpl::DrawText(void *TextObj, int X, int Y, color32 Color, color32 
             mappedConstBuffer.Unmap();
         }
 
-        // Set the input layout
-        m_pDevImmContext->SetVertexDescription(m_pTextVertexLayout);
-
         // Set vertex buffer
         Uint32 stride = sizeof(CTextVtx);
         Uint32 offset = 0;
@@ -923,14 +897,15 @@ void CTwGraphImpl::DrawText(void *TextObj, int X, int Y, color32 Color, color32 
         m_pDevImmContext->SetVertexBuffers(0, 1, ppBuffers, &stride, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
 
         // Render the text
-        IShader *ppShaders[] = { nullptr, m_pTextPS};
+        IPipelineState *pPSO = nullptr;
         if( Color!=0 || !textObj->m_LineColors ) // use a constant color
-            ppShaders[0] = m_pTextCstColorVS;
+            pPSO = m_pPSO[static_cast<int>(PSO_ID::TextCstColor)];
         else
-            ppShaders[0] = m_pTextVS;
-        m_pDevImmContext->SetShaders(ppShaders, 2);
-        m_pDevImmContext->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
-        
+            pPSO = m_pPSO[static_cast<int>(PSO_ID::Text)];
+        m_pDevImmContext->SetPipelineState(pPSO);
+        pPSO->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        m_pDevImmContext->CommitShaderResources(nullptr);
+
         DrawAttribs DrawAttribs;
         DrawAttribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         DrawAttribs.NumVertices = textObj->m_NbTextVerts;
@@ -1072,33 +1047,34 @@ void CTwGraphImpl::DrawTriangles(int _NumTriangles, int *_Vertices, color32 *_Co
             mappedConstBuffer.Unmap();
         }
 
-        // Set the input layout
-        m_pDevImmContext->SetVertexDescription(m_pLineRectVertexLayout);
-
         // Set vertex buffer
         Uint32 stride = sizeof(CLineRectVtx);
         Uint32 offset = 0;
         IBuffer *ppBuffers[] = {m_pTrianglesVertexBuffer};
         m_pDevImmContext->SetVertexBuffers(0, 1, ppBuffers, &stride, &offset, SET_VERTEX_BUFFERS_FLAG_RESET);
 
+        IPipelineState *pLineRectPSO = nullptr;
         if( _CullMode==CULL_CW )
-            m_pDevImmContext->SetRasterizerState(m_pRasterStateCullCW);
+            pLineRectPSO = m_pPSO[static_cast<int>(PSO_ID::Triangle_CullCW)];
         else if( _CullMode==CULL_CCW )
-            m_pDevImmContext->SetRasterizerState(m_pRasterStateCullCCW);
+            pLineRectPSO = m_pPSO[static_cast<int>(PSO_ID::Triangle_CullCCW)];
         else 
-            m_pDevImmContext->SetRasterizerState(m_pRasterStateMultisample);
-
-        // Render the triangles
-        IShader *ppShaders[] = {m_pLineRectVS, m_pLineRectPS};
-        m_pDevImmContext->SetShaders(ppShaders, 2);
-        m_pDevImmContext->BindShaderResources( m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+            pLineRectPSO = m_pPSO[static_cast<int>(PSO_ID::Triangle_Multisample)];
+        if (!pLineRectPSO)
+        {
+            UNEXPECTED("Line rect PSO is not set");
+            return;
+        }
         
+        pLineRectPSO->BindShaderResources(m_pResourceMapping, BIND_SHADER_RESOURCES_UPDATE_UNRESOLVED | BIND_SHADER_RESOURCES_ALL_RESOLVED);
+        
+        m_pDevImmContext->SetPipelineState(pLineRectPSO);
+        m_pDevImmContext->CommitShaderResources(nullptr);
+
         DrawAttribs DrawAttribs;
         DrawAttribs.NumVertices = 3*_NumTriangles;
         DrawAttribs.Topology = PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
         m_pDevImmContext->Draw(DrawAttribs);
-
-        m_pDevImmContext->SetRasterizerState(m_pRasterState); // restore default raster state
     }
 }
 

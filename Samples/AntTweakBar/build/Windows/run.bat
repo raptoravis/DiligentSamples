@@ -12,4 +12,4 @@ if not exist %SAMPLE_PATH% (
 	exit /B 1
 )
 
-%SAMPLE_PATH% -bUseOpenGL=%~2
+%SAMPLE_PATH% mode=%~2

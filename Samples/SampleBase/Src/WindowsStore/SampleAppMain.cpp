@@ -1,4 +1,4 @@
-/*     Copyright 2015 Egor Yusov
+/*     Copyright 2015-2016 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ SampleAppMain::SampleAppMain(const std::shared_ptr<DX::DeviceResources>& deviceR
     auto pDevice = m_deviceResources->GetDevice();
     auto pContext = m_deviceResources->GetDeviceContext();
     auto pSwapChain = m_deviceResources->GetSwapChain();
-    if (!TwInit(TW_DIRECT3D11, pDevice, pContext))
+    if (!TwInit(TW_DIRECT3D11, pDevice, pContext, pSwapChain->GetDesc().ColorBufferFormat))
     {
         //MessageBoxA(wnd, TwGetLastError(), "AntTweakBar initialization failed", MB_OK|MB_ICONERROR);
         //return 0;

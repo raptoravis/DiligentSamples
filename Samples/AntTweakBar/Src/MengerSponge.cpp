@@ -1,4 +1,4 @@
-/*     Copyright 2015 Egor Yusov
+/*     Copyright 2015-2016 Egor Yusov
  *  
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -130,7 +130,7 @@ MengerSpongeSample::MengerSpongeSample(IRenderDevice *pDevice, IDeviceContext *p
     m_BackgroundColor[1] = 0;
     m_BackgroundColor[2] = 0.5f;
     m_BackgroundColor[3] = 1;
-    m_Animate = true;                       // enable animation
+    m_Animate = false;                       // enable animation
     m_AnimationSpeed = 0.2f;               // animation speed
 
 #if defined(PLATFORM_WINDOWS) || defined(PLATFORM_WINDOWS_STORE)
@@ -411,7 +411,7 @@ void MengerSpongeSample::Render()
     const auto& SCDesc = m_pSwapChain->GetDesc();
     // Set world/view/proj matrices and global shader constants
     float aspectRatio = (float)SCDesc.Width / SCDesc.Height;
-    float4x4 proj = Projection(FLOAT_PI/4, aspectRatio, 0.1f, 100.0f, DeviceCaps.DevType == DeviceType::DirectX);
+    float4x4 proj = Projection(FLOAT_PI/4, aspectRatio, 0.1f, 100.0f, DeviceCaps.DevType == DeviceType::D3D11 || DeviceCaps.DevType == DeviceType::D3D12);
     float dist = m_CamDistance + 0.4f;
     float3 camPosInv ( dist * 0.3f, dist * 0.0f, dist * 2.0f );
     float4x4 view = translationMatrix(camPosInv);
