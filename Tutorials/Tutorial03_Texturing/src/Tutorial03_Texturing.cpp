@@ -42,6 +42,9 @@ void Tutorial03_Texturing::Initialize(IRenderDevice*   pDevice,
 {
     SampleBase::Initialize(pDevice, ppContexts, NumDeferredCtx, pSwapChain);
 
+    bool SeparateProgSupported = pDevice->GetDeviceCaps().bSeparableProgramSupported;
+
+    RefCntAutoPtr<IShader> pVS;
     {
         // Pipeline state object encompasses configuration of all GPU stages
 
@@ -80,7 +83,6 @@ void Tutorial03_Texturing::Initialize(IRenderDevice*   pDevice,
         // Define variable type that will be used by default
         CreationAttribs.Desc.DefaultVariableType = SHADER_VARIABLE_TYPE_STATIC;
         // Create vertex shader
-        RefCntAutoPtr<IShader> pVS;
         {
             CreationAttribs.Desc.ShaderType = SHADER_TYPE_VERTEX;
             CreationAttribs.EntryPoint = "main";
@@ -93,7 +95,6 @@ void Tutorial03_Texturing::Initialize(IRenderDevice*   pDevice,
             // Since we did not explcitly specify the type for Constants, default type
             // (SHADER_VARIABLE_TYPE_STATIC) will be used. Static variables never change and are bound directly
             // through the shader (http://diligentgraphics.com/2016/03/23/resource-binding-model-in-diligent-engine-2-0/)
-            pVS->GetShaderVariable("Constants")->Set(m_VSConstants);
         }
 
         // Create pixel shader
@@ -250,7 +251,24 @@ void Tutorial03_Texturing::Initialize(IRenderDevice*   pDevice,
     // http://diligentgraphics.com/2016/03/23/resource-binding-model-in-diligent-engine-2-0/
     m_pPSO->CreateShaderResourceBinding(&m_SRB, true);
     // Set texture SRV in the SRB
-    m_SRB->GetVariable(SHADER_TYPE_PIXEL, "g_Texture")->Set(m_TextureSRV);
+    if (SeparateProgSupported)
+    {
+        pVS->GetShaderVariable("Constants")->Set(m_VSConstants);
+        m_SRB->GetVariable(SHADER_TYPE_PIXEL, "g_Texture")->Set(m_TextureSRV);
+    }
+    else
+    {
+        RefCntAutoPtr<IResourceMapping> pResMapping;
+        ResourceMappingEntry Resources[] = 
+        {
+            {"Constants", m_VSConstants},
+            {"g_Texture", m_TextureSRV},
+            {}
+        };
+
+        pDevice->CreateResourceMapping(ResourceMappingDesc{Resources}, &pResMapping);
+        m_pPSO->BindShaderResources(pResMapping, BIND_SHADER_RESOURCES_VERIFY_ALL_RESOLVED);
+    }
 }
 
 // Render a frame
