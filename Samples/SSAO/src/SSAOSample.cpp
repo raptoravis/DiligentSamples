@@ -49,6 +49,8 @@ void SSAOSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
 {
     SampleBase::Initialize(pEngineFactory, pDevice, ppContexts, NumDeferredCtx, pSwapChain);
 
+    m_SSAO.reset(new SSAOPostProcess(m_pDevice, m_pImmediateContext, m_pSwapChain->GetDesc().ColorBufferFormat, m_pSwapChain->GetDesc().DepthBufferFormat));
+
     RefCntAutoPtr<ITexture> EnvironmentMap;
     {
         // Create uniform environment map
@@ -115,6 +117,7 @@ void SSAOSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
     TwAddVarRW(bar, "Average log lum",    TW_TYPE_FLOAT,   &m_RenderParams.AverageLogLum,     "group='Tone mapping' min=0.01 max=10.0 step=0.01");
     TwAddVarRW(bar, "Middle gray",        TW_TYPE_FLOAT,   &m_RenderParams.MiddleGray,        "group='Tone mapping' min=0.01 max=1.0 step=0.01");
     TwAddVarRW(bar, "White point",        TW_TYPE_FLOAT,   &m_RenderParams.WhitePoint,        "group='Tone mapping' min=0.1  max=20.0 step=0.1");
+    TwAddVarRW(bar, "Enable SSAO",        TW_TYPE_BOOLCPP, &m_EnableSSAO,                     "");
     
     m_Model.reset(new GLTF::Model(m_pDevice, m_pImmediateContext, "sponza/Sponza.gltf"));
     m_GLTFRenderer->InitializeResourceBindings(*m_Model, m_CameraAttribsCB, m_LightAttribsCB);
@@ -128,13 +131,57 @@ SSAOSample::~SSAOSample()
 {
 }
 
+void SSAOSample::WindowResize(Uint32 Width, Uint32 Height)
+{
+    RefCntAutoPtr<ITexture> pOffscreenRenderTarget;
+    TextureDesc ColorDesc;
+    ColorDesc.Type        = RESOURCE_DIM_TEX_2D;
+    ColorDesc.Width       = m_pSwapChain->GetDesc().Width;
+    ColorDesc.Height      = m_pSwapChain->GetDesc().Height;
+    ColorDesc.MipLevels   = 1;
+    ColorDesc.Format      = m_pSwapChain->GetDesc().ColorBufferFormat;
+    ColorDesc.BindFlags   = BIND_SHADER_RESOURCE | BIND_RENDER_TARGET;
+    ColorDesc.ClearValue.Format = ColorDesc.Format;
+    ColorDesc.ClearValue.Color[0] = 0.032f;
+    ColorDesc.ClearValue.Color[1] = 0.032f;
+    ColorDesc.ClearValue.Color[2] = 0.032f;
+    ColorDesc.ClearValue.Color[3] = 1.f;
+    m_pDevice->CreateTexture(ColorDesc, nullptr, &pOffscreenRenderTarget);
+    m_pColorRTV = pOffscreenRenderTarget->GetDefaultView(TEXTURE_VIEW_RENDER_TARGET);
+    m_pColorSRV = pOffscreenRenderTarget->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+    
+
+    // Render target depth attachment
+    RefCntAutoPtr<ITexture> pDepthBuffer;
+    TextureDesc DepthDesc = ColorDesc;
+    DepthDesc.Format = DepthBufferFormat;
+    DepthDesc.ClearValue.Format = DepthDesc.Format;
+    DepthDesc.ClearValue.DepthStencil.Depth = 1;
+    DepthDesc.ClearValue.DepthStencil.Stencil = 0;
+    DepthDesc.BindFlags = BIND_SHADER_RESOURCE | BIND_DEPTH_STENCIL;
+    m_pDevice->CreateTexture(DepthDesc, nullptr, &pDepthBuffer);
+    m_pDepthDSV = pDepthBuffer->GetDefaultView(TEXTURE_VIEW_DEPTH_STENCIL);
+    m_pDepthSRV = pDepthBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
+
+    m_SSAO->OnWindowResize(m_pDevice, Width, Height);
+}
+
 // Render a frame
 void SSAOSample::Render()
 {
-    // Clear the back buffer 
     const float ClearColor[] = { 0.032f,  0.032f,  0.032f, 1.0f }; 
     m_pImmediateContext->ClearRenderTarget(nullptr, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
-    m_pImmediateContext->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    if (m_EnableSSAO)
+    {
+        ITextureView* pRTVs[] = {m_pColorRTV};
+        m_pImmediateContext->SetRenderTargets(_countof(pRTVs), pRTVs, m_pDepthDSV, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        m_pImmediateContext->ClearRenderTarget(m_pColorRTV, ClearColor, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+        m_pImmediateContext->ClearDepthStencil(m_pDepthDSV, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    }
+    else
+    {
+        m_pImmediateContext->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+    }
     
     float4x4 CameraView = m_CameraRotation.ToMatrix() * float4x4::Translation(0.f, 0.0f, m_CameraDist);
     float4x4 CameraWorld = CameraView.Inverse();
@@ -163,6 +210,18 @@ void SSAOSample::Render()
 
     m_RenderParams.ModelTransform = m_ModelTransform;
     m_GLTFRenderer->Render(m_pImmediateContext, *m_Model, m_RenderParams);
+
+    if (m_EnableSSAO)
+    {
+        SSAOPostProcess::FrameAttribs Attribs;
+        Attribs.pCameraAttribsCB = m_CameraAttribsCB;
+        Attribs.pDevice          = m_pDevice;
+        Attribs.pDeviceContext   = m_pImmediateContext;
+        Attribs.ptex2DSrcColorBufferSRV = m_pColorSRV;
+        Attribs.ptex2DSrcDepthBufferSRV = m_pDepthSRV;
+        Attribs.pDstRTV                 = nullptr; // Render to the default framebuffer
+        m_SSAO->PerformPostProcessing(Attribs);
+    }
 }
 
 

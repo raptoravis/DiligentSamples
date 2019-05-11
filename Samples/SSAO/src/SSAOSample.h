@@ -24,10 +24,13 @@
 #pragma once 
 
 #include <vector>
+#include <memory>
+
 #include "SampleBase.h"
 #include "GLTFLoader.h"
 #include "GLTF_PBR_Renderer.h"
 #include "BasicMath.h"
+#include "SSAOPostProcess.h"
 
 namespace Diligent
 {
@@ -44,6 +47,7 @@ public:
     virtual void Render()override final;
     virtual void Update(double CurrTime, double ElapsedTime)override final;
     virtual const Char* GetSampleName()const override final{return "SSAO Sample";}
+    virtual void WindowResize(Uint32 Width, Uint32 Height)override final;
 
 private:
 
@@ -55,12 +59,22 @@ private:
     float3     m_LightDirection;
     float4     m_LightColor      = float4(1,1,1,1);
     float      m_LightIntensity  = 3.f;
+    bool       m_EnableSSAO      = true;
+
+    static constexpr TEXTURE_FORMAT       DepthBufferFormat  = TEX_FORMAT_D32_FLOAT;
+    // Offscreen render target and depth-stencil
+    RefCntAutoPtr<ITextureView>           m_pColorRTV;
+    RefCntAutoPtr<ITextureView>           m_pColorSRV;
+    RefCntAutoPtr<ITextureView>           m_pDepthDSV;
+    RefCntAutoPtr<ITextureView>           m_pDepthSRV;
 
     std::unique_ptr<GLTF_PBR_Renderer> m_GLTFRenderer;
     std::unique_ptr<GLTF::Model>       m_Model;
     RefCntAutoPtr<IBuffer>             m_CameraAttribsCB;
     RefCntAutoPtr<IBuffer>             m_LightAttribsCB;
     RefCntAutoPtr<ITextureView>        m_EnvironmentMapSRV;
+
+    std::unique_ptr<SSAOPostProcess>   m_SSAO;
 };
 
 }
