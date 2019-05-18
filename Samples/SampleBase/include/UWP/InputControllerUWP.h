@@ -41,6 +41,11 @@ public:
             return InputControllerBase::GetKeyState(Key);
         }
 
+        bool IsKeyDown(InputKeys Key)
+        {
+            return (GetKeyState(Key) & INPUT_KEY_STATE_FLAG_KEY_IS_DOWN) != 0;
+        }
+
         void ClearState()
         {
             std::lock_guard<std::mutex> lock(mtx);
@@ -100,6 +105,11 @@ public:
     INPUT_KEY_STATE_FLAGS GetKeyState(InputKeys Key)const
     {
         return m_SharedState->GetKeyState(Key);
+    }
+
+    bool IsKeyDown(InputKeys Key)const
+    {
+        return m_SharedState->IsKeyDown(Key);
     }
 
     std::shared_ptr<SharedControllerState> GetSharedState()
