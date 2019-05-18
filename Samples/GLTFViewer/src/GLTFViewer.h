@@ -49,6 +49,7 @@ private:
     void CreateEnvMapPSO();
     void CreateEnvMapSRB();
     void LoadModel(const char* Path);
+    void ResetView();
 
     enum class BackgroundMode
     {
@@ -60,8 +61,8 @@ private:
 
     GLTF_PBR_Renderer::RenderInfo m_RenderParams;
 
-    Quaternion m_CameraRotation;
-    Quaternion m_ModelRotation;
+    Quaternion m_CameraRotation = {0,0,0,1};
+    Quaternion m_ModelRotation  = Quaternion::RotationFromAxisAngle(float3{0.f, 1.0f, 0.0f}, -PI_F / 2.f);
     float4x4   m_ModelTransform;
     float      m_CameraDist      = 0.9f;
     float3     m_LightDirection;
@@ -83,6 +84,10 @@ private:
     RefCntAutoPtr<IShaderResourceBinding> m_EnvMapSRB;
     RefCntAutoPtr<ITextureView>           m_EnvironmentMapSRV;
     RefCntAutoPtr<IBuffer>                m_EnvMapRenderAttribsCB;
+
+    MouseState m_LastMouseState;
+    float      m_CameraYaw   = 0;
+    float      m_CameraPitch = 0;
 };
 
 }

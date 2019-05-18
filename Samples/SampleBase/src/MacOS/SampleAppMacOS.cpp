@@ -50,6 +50,15 @@ public:
         std::lock_guard<std::mutex> lock(AppMutex);
 
         m_pImmediateContext->SetRenderTargets(0, nullptr, nullptr, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
+
+        SampleApp::Render();
+    }
+
+    virtual void Update(double CurrTime, double ElapsedTime)override
+    {
+        std::lock_guard<std::mutex> lock(AppMutex);
+
+        auto& inputController = m_TheSample->GetInputController();
         // Handle all TwBar events here as the event handlers call draw commands
         // and thus cannot be used in the UI thread
         while(!TwBarEvents.empty())
@@ -59,31 +68,49 @@ public:
             {
                 case TwEvent::LMB_PRESSED:
                 case TwEvent::RMB_PRESSED:
-                    TwMouseButton(TW_MOUSE_PRESSED, event.type == TwEvent::LMB_PRESSED ? TW_MOUSE_LEFT : TW_MOUSE_RIGHT);
-                    break;
+                {
+                    auto handled = TwMouseButton(TW_MOUSE_PRESSED, event.type == TwEvent::LMB_PRESSED ? TW_MOUSE_LEFT : TW_MOUSE_RIGHT);
+                    if (!handled)
+                    {
+                        inputController.OnMouseButtonEvent(
+                                event.type == TwEvent::LMB_PRESSED ?
+                                   InputController::MouseButtonEvent::LMB_Pressed :
+                                   InputController::MouseButtonEvent::RMB_Pressed);
+                    }
+                }
+                break;
 
                 case TwEvent::LMB_RELEASED:
                 case TwEvent::RMB_RELEASED:
                     TwMouseButton(TW_MOUSE_RELEASED, event.type == TwEvent::LMB_RELEASED ? TW_MOUSE_LEFT : TW_MOUSE_RIGHT);
-                    break;
+                    inputController.OnMouseButtonEvent(
+                            event.type == TwEvent::LMB_RELEASED ?
+                                InputController::MouseButtonEvent::LMB_Released :
+                                InputController::MouseButtonEvent::RMB_Released);
+                break;
 
                 case TwEvent::MOUSE_MOVE:
                     TwMouseMotion(event.mouseX, event.mouseY);
-                    break;
+                    inputController.OnMouseMove(event.mouseX, event.mouseY);
+                break;
 
                 case TwEvent::KEY_PRESSED:
-                    TwKeyPressed(event.key, 0);
-                    break;
+                {
+                    auto handled = TwKeyPressed(event.key, 0);
+                    if (!handled)
+                    {
+                        inputController.OnKeyPressed(event.key);
+                    }
+                }
+                break;
+
+                case TwEvent::KEY_RELEASED:
+                    inputController.OnKeyReleased(event.key);
+                break;
             }
             TwBarEvents.pop();
         }
 
-        SampleApp::Render();
-    }
-
-    virtual void Update(double CurrTime, double ElapsedTime)override
-    {
-        std::lock_guard<std::mutex> lock(AppMutex);
         SampleApp::Update(CurrTime, ElapsedTime);
     }
 
@@ -120,7 +147,13 @@ public:
     void OnKeyPressed(int key)override final
     {
         std::lock_guard<std::mutex> lock(AppMutex);
-        TwBarEvents.emplace(key);
+        TwBarEvents.emplace(TwEvent::KEY_PRESSED, key);
+    }
+
+    void OnKeyReleased(int key)override final
+    {
+        std::lock_guard<std::mutex> lock(AppMutex);
+        TwBarEvents.emplace(TwEvent::KEY_RELEASED, key);
     }
 
 private:
@@ -140,7 +173,8 @@ private:
             RMB_PRESSED,
             RMB_RELEASED,
             MOUSE_MOVE,
-            KEY_PRESSED
+            KEY_PRESSED,
+            KEY_RELEASED
         }type;
         int mouseX = 0;
         int mouseY = 0;
@@ -148,7 +182,7 @@ private:
 
         TwEvent(EVENT_TYPE _type) : type(_type){}
         TwEvent(int x, int y) : type(MOUSE_MOVE), mouseX(x), mouseY(y){}
-        TwEvent(int k) : type(KEY_PRESSED), key(k){}
+        TwEvent(EVENT_TYPE _type, int k) : type(_type), key(k){}
     };
     std::queue<TwEvent> TwBarEvents;
 };

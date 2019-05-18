@@ -49,7 +49,13 @@ public:
 
     virtual int HandleXEvent(XEvent *xev)override final
     {
-        return TwEventX11(xev);
+        auto handled = TwEventX11(xev);
+        // Always handle mouse move, button release and key release events
+        if(!handled || xev->type == ButtonRelease || xev->type == MotionNotify || xev->type == KeyRelease)
+        {
+            handled = m_TheSample->GetInputController().HandleXEvent(xev);
+        }
+        return handled;
     }
 
 #if VULKAN_SUPPORTED
@@ -63,11 +69,18 @@ public:
         }xcbInfo = {connection, window};
         InitializeDiligentEngine(nullptr, &xcbInfo);
         TwInitXCBKeysms(connection);
+        m_TheSample->GetInputController().InitXCBKeysms(connection);
         InitializeSample();
     }
     virtual void HandleXCBEvent(xcb_generic_event_t* event)override final
     {
-        TwEventXCB(event);
+        int handled = TwEventXCB(event);
+        auto EventType = event->response_type & 0x7f;
+        // Always handle mouse move, button release and key release events
+        if (!handled || EventType == XCB_MOTION_NOTIFY || EventType == XCB_BUTTON_RELEASE || EventType == XCB_KEY_RELEASE)
+        {
+            handled = m_TheSample->GetInputController().HandleXCBEvent(event);
+        }
     }
 #endif
 };

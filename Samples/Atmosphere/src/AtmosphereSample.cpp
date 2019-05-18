@@ -67,9 +67,7 @@ void AtmosphereSample::GetShadowMapResCB( void *value, void * clientData )
 
 
 AtmosphereSample::AtmosphereSample() : 
-    m_f3LightDir( 0.21f, -0.19f, -0.91f),
-    m_f3CameraDir( 0.51f, -0.33f, 0.68f),
-    m_f3CameraPos(0, 10000.f, 0),
+    m_f3CameraPos(0, 8000.f, 0),
     m_uiShadowMapResolution( 1024 ),
     m_fCascadePartitioningFactor(0.95f),
     m_bVisualizeCascades(false),
@@ -181,8 +179,6 @@ void AtmosphereSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice 
 
     TwAddVarRW(bar, "FPS", TW_TYPE_FLOAT, &m_fFPS, "readonly=true");
 
-    TwAddVarRW(bar, "Light direction", TW_TYPE_DIR3F, &m_f3LightDir, "opened=true axisz=-z showval=false");
-    TwAddVarRW(bar, "Camera direction", TW_TYPE_DIR3F, &m_f3CameraDir, "opened=true axisz=-z showval=false");
     TwAddVarRW( bar, "Camera altitude", TW_TYPE_FLOAT, &m_f3CameraPos.y, "min=2000 max=100000 step=100 keyincr=PGUP keydecr=PGDOWN" );
 
     // Shadows
@@ -877,6 +873,44 @@ void ComputeApproximateNearFarPlaneDist(const float3 &CameraPos,
 
 void AtmosphereSample::Update(double CurrTime, double ElapsedTime)
 {
+    {
+        const auto& mouseState = m_InputController.GetMouseState();
+        constexpr float RotationSpeed[3] = {0.005f, 0.005f, 0.001f};
+        float MouseDeltaX = 0;
+        float MouseDeltaY = 0;
+        if (m_LastMouseState.PosX >=0 && m_LastMouseState.PosY >= 0 &&
+            m_LastMouseState.ButtonFlags != MouseState::BUTTON_FLAG_NONE)
+        {
+            MouseDeltaX = mouseState.PosX - m_LastMouseState.PosX;
+            MouseDeltaY = mouseState.PosY - m_LastMouseState.PosY;
+        }
+        m_LastMouseState = mouseState;
+
+        float fYawDelta   = MouseDeltaX;
+        float fPitchDelta = MouseDeltaY;
+        for (Uint32 i=0; i < 3; ++i)
+        {
+            if (mouseState.ButtonFlags & (1 << i))
+            {
+                m_Rotations[i].yaw   += fYawDelta   * RotationSpeed[i];
+                m_Rotations[i].pitch += fPitchDelta * RotationSpeed[i];
+                m_Rotations[i].pitch = std::max(m_Rotations[i].pitch, -PI_F / 2.f);
+                m_Rotations[i].pitch = std::min(m_Rotations[i].pitch, +PI_F / 2.f);
+            }
+        }
+        m_CameraRotation =
+            Quaternion::RotationFromAxisAngle(float3{1,0,0}, -m_Rotations[0].pitch) *
+            Quaternion::RotationFromAxisAngle(float3{0,1,0}, -m_Rotations[0].yaw);
+        m_f3CameraPos.y += mouseState.WheelDelta * 500.f;
+        m_f3CameraPos.y = std::max(m_f3CameraPos.y, 2000.f);
+        m_f3CameraPos.y = std::min(m_f3CameraPos.y, 100000.f);
+
+        m_f3LightDir.x = std::cos(-m_Rotations[2].yaw) * std::cos(m_Rotations[2].pitch);
+        m_f3LightDir.z = std::sin(-m_Rotations[2].yaw) * std::cos(m_Rotations[2].pitch);
+        m_f3LightDir.y = std::sin(m_Rotations[2].pitch);
+    }
+
+
     SampleBase::Update(CurrTime, ElapsedTime);
 
     m_fElapsedTime = static_cast<float>(ElapsedTime);
@@ -885,14 +919,9 @@ void AtmosphereSample::Update(double CurrTime, double ElapsedTime)
     // Set world/view/proj matrices and global shader constants
     float aspectRatio = (float)SCDesc.Width / SCDesc.Height;
 
-    float3 CamZ = normalize( m_f3CameraDir );
-    float3 CamX = normalize( cross( float3( 0, 1, 0 ), CamZ ) );
-    float3 CamY = normalize( cross( CamZ, CamX ) );
-
     m_mCameraView =
         float4x4::Translation(-m_f3CameraPos) *
-        float4x4::ViewFromBasis( CamX, CamY, CamZ );
-
+        m_CameraRotation.ToMatrix();
 
     // This projection matrix is only used to set up directions in view frustum
     // Actual near and far planes are ignored

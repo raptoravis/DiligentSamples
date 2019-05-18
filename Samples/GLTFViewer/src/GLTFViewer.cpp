@@ -110,9 +110,20 @@ void GLTFViewer::LoadModel(const char* Path)
     }
 }
 
+void GLTFViewer::ResetView()
+{
+    m_CameraYaw   = 0;
+    m_CameraPitch = 0;
+    m_ModelRotation  = Quaternion::RotationFromAxisAngle(float3{0.f, 1.0f, 0.0f}, -PI_F / 2.f);
+    m_CameraRotation = Quaternion::RotationFromAxisAngle(float3{0.75f, 0.0f, 0.75f}, PI_F);
+}
+
+
 void GLTFViewer::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevice, IDeviceContext** ppContexts, Uint32 NumDeferredCtx, ISwapChain* pSwapChain)
 {
     SampleBase::Initialize(pEngineFactory, pDevice, ppContexts, NumDeferredCtx, pSwapChain);
+
+    ResetView();
 
     RefCntAutoPtr<ITexture> EnvironmentMap;
     CreateTextureFromFile("textures/papermill.ktx", TextureLoadInfo{"Environment map"}, m_pDevice, &EnvironmentMap);
@@ -144,8 +155,6 @@ void GLTFViewer::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
 
     CreateEnvMapPSO();
 
-    m_CameraRotation  = Quaternion::RotationFromAxisAngle(float3{0.75f, 0.0f, 0.75f}, PI_F);
-    m_ModelRotation   = Quaternion::RotationFromAxisAngle(float3{0.f, 1.0f, 0.0f}, -PI_F / 2.f);
     m_LightDirection  = normalize(float3(0.5f, -0.6f, -0.2f));
 
     // Create a tweak bar
@@ -186,8 +195,15 @@ void GLTFViewer::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
                 this, "");
 #endif
 
-    TwAddVarRW(bar, "Camera Rotation",    TW_TYPE_QUAT4F,  &m_CameraRotation,  "opened=true axisz=-z");
-    TwAddVarRW(bar, "Model Rotation",     TW_TYPE_QUAT4F,  &m_ModelRotation,   "opened=true axisz=-z");
+    TwAddVarRO(bar, "Camera Rotation",    TW_TYPE_QUAT4F,  &m_CameraRotation,  "opened=true axisz=-z");
+    TwAddVarRO(bar, "Model Rotation",     TW_TYPE_QUAT4F,  &m_ModelRotation,   "opened=true axisz=-z");
+    TwAddButton(bar, "Reset view", 
+                [](void *clientData)
+                {
+                    auto* pViewer = reinterpret_cast<GLTFViewer*>( clientData );
+                    pViewer->ResetView();
+                }, 
+                this, "");
     TwAddVarRW(bar, "Light direction",    TW_TYPE_DIR3F,   &m_LightDirection,  "opened=true axisz=-z");
     TwAddVarRW(bar, "Camera dist",        TW_TYPE_FLOAT,   &m_CameraDist,      "min=0.1 max=5.0 step=0.1");
     TwAddVarRW(bar, "Light Color",        TW_TYPE_COLOR4F, &m_LightColor,      "group='Lighting' opened=false");
@@ -402,6 +418,54 @@ void GLTFViewer::Render()
 
 void GLTFViewer::Update(double CurrTime, double ElapsedTime)
 {
+    {
+        const auto& mouseState = m_InputController.GetMouseState();
+        float MouseDeltaX = 0;
+        float MouseDeltaY = 0;
+        if (m_LastMouseState.PosX >=0 && m_LastMouseState.PosY >= 0 &&
+            m_LastMouseState.ButtonFlags != MouseState::BUTTON_FLAG_NONE)
+        {
+            MouseDeltaX = mouseState.PosX - m_LastMouseState.PosX;
+            MouseDeltaY = mouseState.PosY - m_LastMouseState.PosY;
+        }
+        m_LastMouseState = mouseState;
+
+        constexpr float RotationSpeed = 0.005f;
+        float fYawDelta   = MouseDeltaX * RotationSpeed;
+        float fPitchDelta = MouseDeltaY * RotationSpeed;
+        if (mouseState.ButtonFlags & MouseState::BUTTON_FLAG_LEFT)
+        {
+            m_CameraYaw   += fYawDelta;
+            m_CameraPitch += fPitchDelta;
+            m_CameraPitch = std::max(m_CameraPitch, -PI_F / 2.f);
+            m_CameraPitch = std::min(m_CameraPitch, +PI_F / 2.f);
+        }
+
+        // Apply extra rotations to adjust the view to match Khronos GLTF viewer
+        m_CameraRotation =
+            Quaternion::RotationFromAxisAngle(float3{1,0,0}, -m_CameraPitch) *
+            Quaternion::RotationFromAxisAngle(float3{0,1,0}, -m_CameraYaw)   *
+            Quaternion::RotationFromAxisAngle(float3{0.75f, 0.0f, 0.75f}, PI_F);
+
+        if (mouseState.ButtonFlags & MouseState::BUTTON_FLAG_RIGHT)
+        {
+            auto CameraView = m_CameraRotation.ToMatrix();
+            auto CameraWorld = CameraView.Transpose();
+
+            float3 CameraRight = float3::MakeVector(CameraWorld[0]);
+            float3 CameraUp    = float3::MakeVector(CameraWorld[1]);
+            m_ModelRotation = 
+                Quaternion::RotationFromAxisAngle(CameraRight, -fPitchDelta) *
+                Quaternion::RotationFromAxisAngle(CameraUp,    -fYawDelta)   *
+                m_ModelRotation;
+        }
+
+        m_CameraDist -= mouseState.WheelDelta * 0.25f;
+    }
+
+    if ((m_InputController.GetKeyState(InputKeys::Reset) & INPUT_KEY_STATE_FLAG_KEY_IS_DOWN) != 0)
+        ResetView();
+
     SampleBase::Update(CurrTime, ElapsedTime);
 
     if (!m_Model->Animations.empty() && m_PlayAnimation)

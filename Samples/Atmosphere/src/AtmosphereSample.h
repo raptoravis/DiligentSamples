@@ -50,7 +50,7 @@ public:
     virtual void Update(double CurrTime, double ElapsedTime)override final;
     virtual void WindowResize(Uint32 Width, Uint32 Height)override final;
     virtual const Char* GetSampleName()const override final{return "Atmosphere Sample";}
-    
+
 private:
     void CreateShadowMap();
     void ReleaseShadowMap();
@@ -66,8 +66,8 @@ private:
 
     void UpdateGUI();
 
-    float3 m_f3LightDir;       // light direction vector
-    float3 m_f3CameraDir;      // tmp camera view direction vector
+    float3 m_f3LightDir = {0,0,1};
+    Quaternion m_CameraRotation = {0,0,0,1};
     float3 m_f3CameraPos;
     float4x4 m_mCameraView;
     float4x4 m_mCameraProj;
@@ -101,6 +101,23 @@ private:
 
     RefCntAutoPtr<ITexture>  m_pOffscreenColorBuffer;
     RefCntAutoPtr<ITexture>  m_pOffscreenDepthBuffer;
+
+    struct RotationAngles
+    {
+        float yaw   = 0;
+        float pitch = 0;
+        RotationAngles(float y, float p) :
+            yaw(y),
+            pitch(p)
+        {}
+        RotationAngles(){}
+    }m_Rotations[3] = 
+    {
+        {0.23f, 0.18f},
+        {},
+        {2.16f, -0.06f}
+    }; // camera (LMB), unused (MBM), light (RMB)
+    MouseState m_LastMouseState;
 };
 
 }

@@ -5,10 +5,12 @@ project(SampleBase)
 if(PLATFORM_WIN32)
     set(SOURCE 
         src/Win32/SampleAppWin32.cpp
+        src/Win32/InputControllerWin32.cpp
         src/SampleApp.cpp
     )
     set(INCLUDE 
         include/SampleApp.h
+        include/Win32/InputControllerWin32.h
     )
     set(WIN32_RESOURCES
         src/Win32/resources/Win32AppResource.h
@@ -38,12 +40,15 @@ elseif(PLATFORM_UNIVERSAL_WINDOWS)
         set(SAMPLE_BASE_UWP_SOURCE
             ${SAMPLE_BASE_SOURCE_DIR}/src/UWP/TwEventUWP.cpp
             ${SAMPLE_BASE_SOURCE_DIR}/src/UWP/SampleAppUWP.cpp
+            ${SAMPLE_BASE_SOURCE_DIR}/src/UWP/InputControllerEventHandlerUWP.cpp
             ${SAMPLE_BASE_SOURCE_DIR}/src/SampleApp.cpp
         )
 
         set(SAMPLE_BASE_UWP_INCLUDE
             ${SAMPLE_BASE_SOURCE_DIR}/src/UWP/TwEventUWP.h
+            ${SAMPLE_BASE_SOURCE_DIR}/src/UWP/InputControllerEventHandlerUWP.h
             ${SAMPLE_BASE_SOURCE_DIR}/include/SampleApp.h
+            ${SAMPLE_BASE_SOURCE_DIR}/include/UWP/InputControllerUWP.h
         )
 
         set(SAMPLE_BASE_UWP_INCLUDE_DIR
@@ -58,43 +63,59 @@ elseif(PLATFORM_UNIVERSAL_WINDOWS)
 
 elseif(PLATFORM_ANDROID)
     set(SOURCE
+        src/Android/InputControllerAndroid.cpp
         src/Android/SampleAppAndroid.cpp
         src/SampleApp.cpp
     )
     set(INCLUDE 
+        include/Android/InputControllerAndroid.h
         include/SampleApp.h
     )
 elseif(PLATFORM_LINUX)
     set(SOURCE 
+        src/Linux/InputControllerLinux.cpp
         src/Linux/SampleAppLinux.cpp
         src/SampleApp.cpp
     )
     set(INCLUDE 
+        include/Linux/InputControllerLinux.h
         include/SampleApp.h
     )
 elseif(PLATFORM_MACOS)
 
     set(SOURCE
+        src/MacOS/InputControllerMacOS.cpp
         src/MacOS/SampleAppMacOS.cpp
         src/SampleApp.cpp
     )
     set(INCLUDE
+        Include/MacOS/InputControllerMacOS.h
         include/SampleApp.h
     )
 
 elseif(PLATFORM_IOS)
     set(SOURCE
+        src/IOS/InputControllerIOS.cpp
         src/IOS/SampleAppIOS.cpp
         src/SampleApp.cpp
     )
     set(INCLUDE
+        include/IOS/InputControllerIOS.h
         include/SampleApp.h
     )
 
 endif()
 
-list(APPEND SOURCE src/SampleBase.cpp)
-list(APPEND INCLUDE include/SampleBase.h)
+list(APPEND SOURCE
+    src/FirstPersonCamera.cpp
+    src/SampleBase.cpp
+)
+
+list(APPEND INCLUDE
+    include/FirstPersonCamera.h
+    include/InputController.h
+    include/SampleBase.h
+)
 
 
 add_library(SampleBase STATIC ${SOURCE} ${INCLUDE})
@@ -136,7 +157,7 @@ if(PLATFORM_UNIVERSAL_WINDOWS)
 elseif(PLATFORM_ANDROID)
     target_link_libraries(SampleBase PRIVATE GLESv3 PUBLIC native_app_glue)
 elseif(PLATFORM_LINUX)
-    target_link_libraries(SampleBase PRIVATE GL X11)
+    target_link_libraries(SampleBase PRIVATE XCBKeySyms GL X11)
 elseif(PLATFORM_MACOS OR PLATFORM_IOS)
 
 endif()
