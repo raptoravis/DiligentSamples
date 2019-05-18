@@ -83,7 +83,6 @@ void SSAOSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
     RendererCI.DSVFmt         = DepthBufferFmt;
     RendererCI.AllowDebugView = false;
     RendererCI.UseIBL         = true;
-    RendererCI.FrontCCW       = true;
     m_GLTFRenderer.reset(new GLTF_PBR_Renderer(m_pDevice, m_pImmediateContext, RendererCI));
 
     CreateUniformBuffer(m_pDevice, sizeof(CameraAttribs),       "Camera attribs buffer",         &m_CameraAttribsCB);
@@ -98,7 +97,6 @@ void SSAOSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
 
     m_GLTFRenderer->PrecomputeCubemaps(m_pDevice, m_pImmediateContext, m_EnvironmentMapSRV);
 
-    m_CameraRotation  = Quaternion::RotationFromAxisAngle(float3{0.75f, 0.0f, 0.75f}, PI_F);
     m_LightDirection  = normalize(float3(0.5f, -0.6f, -0.2f));
 
     // Create a tweak bar
@@ -106,9 +104,7 @@ void SSAOSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
     int barSize[2] = {250 * m_UIScale, 600 * m_UIScale};
     TwSetParam(bar, NULL, "size", TW_PARAM_INT32, 2, barSize);
 
-    TwAddVarRW(bar, "Camera Rotation",    TW_TYPE_QUAT4F,  &m_CameraRotation,  "opened=true axisz=-z");
     TwAddVarRW(bar, "Light direction",    TW_TYPE_DIR3F,   &m_LightDirection,  "opened=true axisz=-z");
-    TwAddVarRW(bar, "Camera dist",        TW_TYPE_FLOAT,   &m_CameraDist,      "min=0.1 max=5.0 step=0.1");
     TwAddVarRW(bar, "Light Color",        TW_TYPE_COLOR4F, &m_LightColor,      "group='Lighting' opened=false");
     TwAddVarRW(bar, "Light Intensity",    TW_TYPE_FLOAT,   &m_LightIntensity,  "group='Lighting' min=0.0 max=50.0 step=0.1");
     TwAddVarRW(bar, "Occlusion strength", TW_TYPE_FLOAT,   &m_RenderParams.OcclusionStrength, "group='Lighting' min=0.0 max=1.0 step=0.01");
@@ -122,9 +118,13 @@ void SSAOSample::Initialize(IEngineFactory* pEngineFactory, IRenderDevice* pDevi
     m_Model.reset(new GLTF::Model(m_pDevice, m_pImmediateContext, "sponza/Sponza.gltf"));
     m_GLTFRenderer->InitializeResourceBindings(*m_Model, m_CameraAttribsCB, m_LightAttribsCB);
 
-    float4x4 InvYAxis = float4x4::Identity();
-    InvYAxis._22 = -1;
-    m_ModelTransform = float4x4::Translation(float3(0, -3.f, 0)) * InvYAxis;
+    m_ModelTransform = float4x4::Translation(float3(0, -3.f, 0));
+
+    m_Camera.SetPos(float3(-6, 0, -0.5f));
+    m_Camera.SetRotation(PI_F/2.f, 0);
+    m_Camera.SetRotationSpeed(0.005f);
+    m_Camera.SetMoveSpeed(2.f);
+    m_Camera.SetSpeedUpScales(5.f, 10.f);
 }
 
 SSAOSample::~SSAOSample()
@@ -164,6 +164,11 @@ void SSAOSample::WindowResize(Uint32 Width, Uint32 Height)
     m_pDepthSRV = pDepthBuffer->GetDefaultView(TEXTURE_VIEW_SHADER_RESOURCE);
 
     m_SSAO->OnWindowResize(m_pDevice, Width, Height);
+
+    float NearPlane = 0.1f;
+    float FarPlane = 100.f;
+    float AspectRatio = static_cast<float>(Width) / static_cast<float>(Height);
+    m_Camera.SetProjAttribs(NearPlane, FarPlane, AspectRatio, PI_F / 4.f, m_pDevice->GetDeviceCaps().IsGLDevice());
 }
 
 // Render a frame
@@ -182,16 +187,11 @@ void SSAOSample::Render()
     {
         m_pImmediateContext->ClearDepthStencil(nullptr, CLEAR_DEPTH_FLAG, 1.f, 0, RESOURCE_STATE_TRANSITION_MODE_TRANSITION);
     }
-    
-    float4x4 CameraView = m_CameraRotation.ToMatrix() * float4x4::Translation(0.f, 0.0f, m_CameraDist);
-    float4x4 CameraWorld = CameraView.Inverse();
+
+    const auto& CameraView  = m_Camera.GetViewMatrix();
+    const auto& CameraWorld = m_Camera.GetWorldMatrix();
     float3 CameraWorldPos = float3::MakeVector(CameraWorld[3]);
-    float NearPlane = 0.1f;
-    float FarPlane = 100.f;
-    float aspectRatio = static_cast<float>(m_pSwapChain->GetDesc().Width) / static_cast<float>(m_pSwapChain->GetDesc().Height);
-    // Projection matrix differs between DX and OpenGL
-    auto Proj = float4x4::Projection(PI_F / 4.f, aspectRatio, NearPlane, FarPlane, m_pDevice->GetDeviceCaps().IsGLDevice());
-    // Compute world-view-projection matrix
+    const auto& Proj = m_Camera.GetProjMatrix();
     auto CameraViewProj = CameraView * Proj;
 
     {
@@ -228,6 +228,7 @@ void SSAOSample::Render()
 void SSAOSample::Update(double CurrTime, double ElapsedTime)
 {
     SampleBase::Update(CurrTime, ElapsedTime);
+    m_Camera.Update(m_InputController, static_cast<float>(ElapsedTime));
 }
 
 }

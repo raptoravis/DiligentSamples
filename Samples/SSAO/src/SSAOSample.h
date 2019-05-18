@@ -31,6 +31,7 @@
 #include "GLTF_PBR_Renderer.h"
 #include "BasicMath.h"
 #include "SSAOPostProcess.h"
+#include "FirstPersonCamera.h"
 
 namespace Diligent
 {
@@ -53,9 +54,7 @@ private:
 
     GLTF_PBR_Renderer::RenderInfo m_RenderParams;
 
-    Quaternion m_CameraRotation;
     float4x4   m_ModelTransform;
-    float      m_CameraDist      = 0.9f;
     float3     m_LightDirection;
     float4     m_LightColor      = float4(1,1,1,1);
     float      m_LightIntensity  = 3.f;
@@ -75,6 +74,7 @@ private:
     RefCntAutoPtr<ITextureView>        m_EnvironmentMapSRV;
 
     std::unique_ptr<SSAOPostProcess>   m_SSAO;
+    FirstPersonCamera                  m_Camera;
 };
 
 }
