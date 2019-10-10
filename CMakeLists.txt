@@ -96,3 +96,5 @@ endfunction()
 
 add_subdirectory(Samples)
 add_subdirectory(Tutorials)
+
+add_subdirectory(playground)
