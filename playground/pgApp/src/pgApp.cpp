@@ -23,7 +23,7 @@
 
 #include <cmath>
 #include <array>
-#include "pg_module.h"
+#include "pgApp.h"
 #include "MapHelper.h"
 #include "BasicMath.h"
 #include "GraphicsUtilities.h"
